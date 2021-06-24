@@ -705,6 +705,7 @@ describe('CloudWatchDatasource', () => {
         },
         matchExact: false,
         statistics: [],
+        statistic: '',
       };
 
       ds.interpolateVariablesInQueries([logQuery], {});

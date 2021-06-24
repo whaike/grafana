@@ -43,6 +43,8 @@ import { dispatch } from '../../../store/store';
 import { isAllVariable } from '../../variables/utils';
 import { DashboardPanelsChangedEvent, RefreshEvent, RenderEvent, TimeRangeUpdatedEvent } from 'app/types/events';
 import { getTimeSrv } from '../services/TimeSrv';
+import { CloudWatchMetricsQuery } from 'app/plugins/datasource/cloudwatch/types';
+import { getNextRefIdChar } from 'app/core/utils/query';
 
 export interface CloneOptions {
   saveVariables?: boolean;
@@ -158,6 +160,26 @@ export class DashboardModel {
     this.addBuiltInAnnotationQuery();
     this.sortPanelsByGridPos();
     this.hasChangesThatAffectsAllPanels = false;
+
+    for (const panel of this.panels) {
+      for (const target of panel.targets) {
+        // TODO: Check that this is a CloudWatch query in a better way
+        if (target.hasOwnProperty('dimensions') && target.hasOwnProperty('namespace')) {
+          const newTargets = [];
+          const cloudWatchQuery = target as CloudWatchMetricsQuery;
+          if (cloudWatchQuery?.statistics && cloudWatchQuery?.statistics.length > 1) {
+            for (const stat of cloudWatchQuery.statistics.splice(1)) {
+              newTargets.push({ ...cloudWatchQuery, statistics: [stat] });
+            }
+            cloudWatchQuery.statistic = cloudWatchQuery.statistics[0];
+          }
+          for (const newTarget of newTargets) {
+            newTarget.refId = getNextRefIdChar(panel.targets);
+            panel.targets.push(newTarget);
+          }
+        }
+      }
+    }
   }
 
   addBuiltInAnnotationQuery() {

@@ -11,7 +11,11 @@ export interface CloudWatchMetricsQuery extends DataQuery {
 
   metricName: string;
   dimensions: { [key: string]: string | string[] };
-  statistics: string[];
+  statistic: string;
+  /**
+   * @deprecated use statistic
+   */
+  statistics?: string[];
   period: string;
   alias: string;
   matchExact: boolean;
@@ -333,4 +337,10 @@ export interface CloudWatchMetricsAnnotation {
   prefixMatching: false;
   actionPrefix: string;
   alarmNamePrefix: string;
+}
+
+export interface ExecutedQueryPreview {
+  id: string;
+  executedQuery: string;
+  period: string;
 }

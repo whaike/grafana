@@ -10,15 +10,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana/pkg/components/simplejson"
 )
 
 // Parses the json queries and returns a requestQuery. The requestQuery has a 1 to 1 mapping to a query editor row
-func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime time.Time, endTime time.Time) (map[string][]*requestQuery, error) {
-	requestQueries := make(map[string][]*requestQuery)
-	for _, query := range queries {
+func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime time.Time, endTime time.Time) (map[string]map[string]*cloudWatchQuery, error) {
+	requestQueries := make(map[string]map[string]*cloudWatchQuery)
+	migratesQueries, err := migrateLegacyQuery(queries, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	for _, query := range migratesQueries {
 		model, err := simplejson.NewJson(query.JSON)
 		if err != nil {
 			return nil, &queryError{err: err, RefID: query.RefID}
@@ -36,15 +39,44 @@ func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime
 		}
 
 		if _, exist := requestQueries[query.Region]; !exist {
-			requestQueries[query.Region] = make([]*requestQuery, 0)
+			requestQueries[query.Region] = make(map[string]*cloudWatchQuery, 0)
 		}
-		requestQueries[query.Region] = append(requestQueries[query.Region], query)
+		requestQueries[query.Region][query.Id] = query
 	}
 
 	return requestQueries, nil
 }
 
-func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time, endTime time.Time) (*requestQuery, error) {
+// migrateLegacyQuery migrates queries that has a `statistics` field to a use the `statistic` field instead.
+// This migration is also done in the frontend, so this should only ever be needed for alerting queries
+// In case the query used more than one stat, the first stat in the slice will be used in the statistic field
+func migrateLegacyQuery(queries []backend.DataQuery, startTime time.Time, endTime time.Time) ([]*backend.DataQuery, error) {
+	migratedQueries := []*backend.DataQuery{}
+	for _, query := range queries {
+		model, err := simplejson.NewJson(query.JSON)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = model.Get("statistic").String()
+		// If there's not a statistic property in the json, we now it's the legacy format and then it has to be migrated
+		if err != nil {
+			stats := model.Get("statistics").MustStringArray()
+			model.Del("statistics")
+			model.Set("statistic", stats[0])
+			query.JSON, err = model.MarshalJSON()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		migratedQueries = append(migratedQueries, &query)
+	}
+
+	return migratedQueries, nil
+}
+
+func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time, endTime time.Time) (*cloudWatchQuery, error) {
 	plog.Debug("Parsing request query", "query", model)
 	reNumber := regexp.MustCompile(`^\d+$`)
 	region, err := model.Get("region").String()
@@ -63,7 +95,8 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse dimensions: %v", err)
 	}
-	statistics := parseStatistics(model)
+
+	statistic, err := model.Get("statistic").String()
 
 	p := model.Get("period").MustString("")
 	var period int
@@ -94,6 +127,9 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 	}
 
 	id := model.Get("id").MustString("")
+	if id == "" {
+		id = strings.ToLower(refId)
+	}
 	expression := model.Get("expression").MustString("")
 	alias := model.Get("alias").MustString()
 	returnData := !model.Get("hide").MustBool(false)
@@ -107,19 +143,21 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 
 	matchExact := model.Get("matchExact").MustBool(true)
 
-	return &requestQuery{
-		RefId:      refId,
-		Region:     region,
-		Namespace:  namespace,
-		MetricName: metricName,
-		Dimensions: dimensions,
-		Statistics: aws.StringSlice(statistics),
-		Period:     period,
-		Alias:      alias,
-		Id:         id,
-		Expression: expression,
-		ReturnData: returnData,
-		MatchExact: matchExact,
+	return &cloudWatchQuery{
+		RefId:          refId,
+		Region:         region,
+		Id:             id,
+		Namespace:      namespace,
+		MetricName:     metricName,
+		Statistic:          statistic,
+		Expression:     expression,
+		ReturnData:     returnData,
+		Dimensions:     dimensions,
+		Period:         period,
+		Alias:          alias,
+		MatchExact:     matchExact,
+		UsedExpression: "",
+		DeepLink:       "",
 	}, nil
 }
 

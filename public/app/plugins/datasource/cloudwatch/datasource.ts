@@ -263,8 +263,7 @@ export class CloudWatchDatasource extends DataSourceWithBackend<CloudWatchQuery,
     const validMetricsQueries = metricQueries
       .filter(
         (item) =>
-          (!!item.region && !!item.namespace && !!item.metricName && !isEmpty(item.statistics)) ||
-          item.expression?.length > 0
+          (!!item.region && !!item.namespace && !!item.metricName && !!item.statistic) || item.expression?.length > 0
       )
       .map(
         (item: CloudWatchMetricsQuery): MetricQuery => {
@@ -272,24 +271,10 @@ export class CloudWatchDatasource extends DataSourceWithBackend<CloudWatchQuery,
           item.namespace = this.replace(item.namespace, options.scopedVars, true, 'namespace');
           item.metricName = this.replace(item.metricName, options.scopedVars, true, 'metric name');
           item.dimensions = this.convertDimensionFormat(item.dimensions, options.scopedVars);
-          item.statistics = item.statistics.map((stat) => this.replace(stat, options.scopedVars, true, 'statistics'));
+          item.statistic = this.templateSrv.replace(item.statistic, options.scopedVars);
           item.period = String(this.getPeriod(item, options)); // use string format for period in graph query, and alerting
           item.id = this.templateSrv.replace(item.id, options.scopedVars);
           item.expression = this.templateSrv.replace(item.expression, options.scopedVars);
-
-          // valid ExtendedStatistics is like p90.00, check the pattern
-          const hasInvalidStatistics = item.statistics.some((s) => {
-            if (s.indexOf('p') === 0) {
-              const matches = /^p\d{2}(?:\.\d{1,2})?$/.exec(s);
-              return !matches || matches[0] !== s;
-            }
-
-            return false;
-          });
-
-          if (hasInvalidStatistics) {
-            throw { message: 'Invalid extended statistics' };
-          }
 
           return {
             intervalMs: options.intervalMs,
