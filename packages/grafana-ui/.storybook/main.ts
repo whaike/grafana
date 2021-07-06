@@ -56,6 +56,8 @@ module.exports = {
             },
           },
         ],
+        exclude: /node_modules/,
+        include: [path.resolve(__dirname, '../../../public/'), path.resolve(__dirname, '../../../packages/')],
       },
       {
         test: /\.scss$/,
