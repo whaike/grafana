@@ -20,7 +20,8 @@ func createTestableKVStore(t *testing.T) *KVStore {
 		SQLStore: sqlstore,
 	}
 
-	kv.Init()
+	err := kv.Init()
+	require.NoError(t, err)
 
 	return kv
 }
