@@ -36,6 +36,8 @@ import { config } from 'app/core/config';
 import { plugin as statPanelPlugin } from 'app/plugins/panel/stat/module';
 import { plugin as gaugePanelPlugin } from 'app/plugins/panel/gauge/module';
 import { getStandardFieldConfigs, getStandardOptionEditors } from '@grafana/ui';
+import { CloudWatchMetricsQuery } from 'app/plugins/datasource/cloudwatch/types';
+import { getNextRefIdChar } from 'app/core/utils/query';
 
 standardEditorsRegistry.setInit(getStandardOptionEditors);
 standardFieldConfigEditorRegistry.setInit(getStandardFieldConfigs);
@@ -670,6 +672,29 @@ export class DashboardMigrator {
         if (this.dashboard.panels[j].panels) {
           for (n = 0; n < this.dashboard.panels[j].panels.length; n++) {
             this.dashboard.panels[j].panels[n] = panelUpgrades[k].call(this, this.dashboard.panels[j].panels[n]);
+          }
+        }
+      }
+    }
+  }
+
+  migrateCloudWatchQueries() {
+    for (const panel of this.dashboard.panels) {
+      for (const target of panel.targets) {
+        // TODO: Check that this is a CloudWatch query in a better way
+        if (target.hasOwnProperty('dimensions') && target.hasOwnProperty('namespace')) {
+          const newTargets = [];
+          const cloudWatchQuery = target as CloudWatchMetricsQuery;
+          if (cloudWatchQuery?.statistics && cloudWatchQuery?.statistics.length > 1) {
+            for (const stat of cloudWatchQuery.statistics.splice(1)) {
+              newTargets.push({ ...cloudWatchQuery, statistic: stat });
+            }
+            cloudWatchQuery.statistic = cloudWatchQuery.statistics[0];
+          }
+          for (const newTarget of newTargets) {
+            newTarget.refId = getNextRefIdChar(panel.targets);
+            delete newTarget.statistics;
+            panel.targets.push(newTarget);
           }
         }
       }
