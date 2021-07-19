@@ -52,7 +52,8 @@ func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime
 // In case the query used more than one stat, the first stat in the slice will be used in the statistic field
 func migrateLegacyQuery(queries []backend.DataQuery, startTime time.Time, endTime time.Time) ([]*backend.DataQuery, error) {
 	migratedQueries := []*backend.DataQuery{}
-	for _, query := range queries {
+	for _, q := range queries {
+		query := q
 		model, err := simplejson.NewJson(query.JSON)
 		if err != nil {
 			return nil, err
