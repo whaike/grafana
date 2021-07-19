@@ -102,9 +102,9 @@ func TestCloudWatchResponseParser(t *testing.T) {
 				"LoadBalancer": {"lb1", "lb2"},
 				"TargetGroup":  {"tg"},
 			},
-			Statistic:  "Average",
-			Period: 60,
-			Alias:  "{{LoadBalancer}} Expanded",
+			Statistic: "Average",
+			Period:    60,
+			Alias:     "{{LoadBalancer}} Expanded",
 		}
 		frames, err := buildDataFrames(*response, query)
 		require.NoError(t, err)
@@ -164,9 +164,9 @@ func TestCloudWatchResponseParser(t *testing.T) {
 				"LoadBalancer": {"lb1", "lb2"},
 				"TargetGroup":  {"tg"},
 			},
-			Statistic:  "Average",
-			Period: 60,
-			Alias:  "{{LoadBalancer}} Expanded",
+			Statistic: "Average",
+			Period:    60,
+			Alias:     "{{LoadBalancer}} Expanded",
 		}
 		frames, err := buildDataFrames(*response, query)
 		require.NoError(t, err)
@@ -227,9 +227,9 @@ func TestCloudWatchResponseParser(t *testing.T) {
 				"LoadBalancer": {"*"},
 				"TargetGroup":  {"tg"},
 			},
-			Statistic:  "Average",
-			Period: 60,
-			Alias:  "{{LoadBalancer}} Expanded",
+			Statistic: "Average",
+			Period:    60,
+			Alias:     "{{LoadBalancer}} Expanded",
 		}
 		frames, err := buildDataFrames(*response, query)
 		require.NoError(t, err)
@@ -264,9 +264,9 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Dimensions: map[string][]string{
 				"LoadBalancer": {"lb1", "lb2"},
 			},
-			Statistic:  "Average",
-			Period: 60,
-			Alias:  "{{LoadBalancer}} Expanded",
+			Statistic: "Average",
+			Period:    60,
+			Alias:     "{{LoadBalancer}} Expanded",
 		}
 		frames, err := buildDataFrames(*response, query)
 		require.NoError(t, err)
@@ -305,9 +305,9 @@ func TestCloudWatchResponseParser(t *testing.T) {
 				"InstanceType": {"micro"},
 				"Resource":     {"res"},
 			},
-			Statistic:  "Average",
-			Period: 60,
-			Alias:  "{{LoadBalancer}} Expanded {{InstanceType}} - {{Resource}}",
+			Statistic: "Average",
+			Period:    60,
+			Alias:     "{{LoadBalancer}} Expanded {{InstanceType}} - {{Resource}}",
 		}
 		frames, err := buildDataFrames(*response, query)
 		require.NoError(t, err)
@@ -349,9 +349,9 @@ func TestCloudWatchResponseParser(t *testing.T) {
 				"LoadBalancer": {"lb"},
 				"TargetGroup":  {"tg"},
 			},
-			Statistic:  "Average",
-			Period: 60,
-			Alias:  "{{namespace}}_{{metric}}_{{stat}}",
+			Statistic: "Average",
+			Period:    60,
+			Alias:     "{{namespace}}_{{metric}}_{{stat}}",
 		}
 		frames, err := buildDataFrames(*response, query)
 		require.NoError(t, err)

@@ -150,7 +150,7 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 		Id:             id,
 		Namespace:      namespace,
 		MetricName:     metricName,
-		Statistic:          statistic,
+		Statistic:      statistic,
 		Expression:     expression,
 		ReturnData:     returnData,
 		Dimensions:     dimensions,
