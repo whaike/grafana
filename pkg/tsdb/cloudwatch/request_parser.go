@@ -130,7 +130,7 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 
 	id := model.Get("id").MustString("")
 	if id == "" {
-		id = strings.ToLower(refId)
+		id = fmt.Sprintf("query%s", refId)
 	}
 	expression := model.Get("expression").MustString("")
 	alias := model.Get("alias").MustString()
