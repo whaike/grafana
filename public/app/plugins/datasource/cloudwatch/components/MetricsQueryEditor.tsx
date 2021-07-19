@@ -1,5 +1,4 @@
 import React, { PureComponent, ChangeEvent } from 'react';
-import { isEmpty } from 'lodash';
 
 import { ExploreQueryFieldProps, PanelData } from '@grafana/data';
 import { LegacyForms, ValidationEvents, EventsWithValidation, Icon } from '@grafana/ui';
