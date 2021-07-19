@@ -74,7 +74,7 @@ export class MetricsQueryEditor extends PureComponent<Props, State> {
     }
 
     return {
-      executedQuery: data?.series[0].meta.executedQueryString || '',
+      executedQuery: data?.series[0].meta.executedQueryString ?? '',
       period: data.series[0].meta.custom['period'],
       id: data.series[0].meta.custom['id'],
     };
@@ -85,7 +85,7 @@ export class MetricsQueryEditor extends PureComponent<Props, State> {
     const metricsQuery = this.props.query as CloudWatchMetricsQuery;
     const { showMeta } = this.state;
     const query = normalizeQuery(metricsQuery);
-    let executedQueryPreview = this.getExecutedQueryPreview(data);
+    const executedQueryPreview = this.getExecutedQueryPreview(data);
     return (
       <>
         <MetricsQueryFieldsEditor {...{ ...this.props, query }}></MetricsQueryFieldsEditor>
