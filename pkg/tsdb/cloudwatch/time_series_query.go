@@ -71,7 +71,7 @@ func (e *cloudWatchExecutor) executeTimeSeriesQuery(ctx context.Context, req *ba
 				return err
 			}
 
-			res, err := e.parseResponse(mdo, requestQueries)
+			res, err := e.parseResponse(startTime, endTime, mdo, requestQueries)
 			if err != nil {
 				return err
 			}

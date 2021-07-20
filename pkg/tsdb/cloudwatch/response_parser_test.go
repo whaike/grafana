@@ -23,6 +23,8 @@ func loadGetMetricDataOutputsFromFile() ([]*cloudwatch.GetMetricDataOutput, erro
 }
 
 func TestCloudWatchResponseParser(t *testing.T) {
+	startTime := time.Now()
+	endTime := startTime.Add(2 * time.Hour)
 	t.Run("when aggregating response", func(t *testing.T) {
 		getMetricDataOutputs, err := loadGetMetricDataOutputsFromFile()
 		require.NoError(t, err)
@@ -106,7 +108,7 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Period:    60,
 			Alias:     "{{LoadBalancer}} Expanded",
 		}
-		frames, err := buildDataFrames(*response, query)
+		frames, err := buildDataFrames(startTime, endTime, *response, query)
 		require.NoError(t, err)
 
 		frame1 := frames[0]
@@ -168,7 +170,7 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Period:    60,
 			Alias:     "{{LoadBalancer}} Expanded",
 		}
-		frames, err := buildDataFrames(*response, query)
+		frames, err := buildDataFrames(startTime, endTime, *response, query)
 		require.NoError(t, err)
 
 		frame1 := frames[0]
@@ -231,7 +233,7 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Period:    60,
 			Alias:     "{{LoadBalancer}} Expanded",
 		}
-		frames, err := buildDataFrames(*response, query)
+		frames, err := buildDataFrames(startTime, endTime, *response, query)
 		require.NoError(t, err)
 
 		assert.Equal(t, "lb3 Expanded", frames[0].Name)
@@ -268,7 +270,7 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Period:    60,
 			Alias:     "{{LoadBalancer}} Expanded",
 		}
-		frames, err := buildDataFrames(*response, query)
+		frames, err := buildDataFrames(startTime, endTime, *response, query)
 		require.NoError(t, err)
 
 		assert.Len(t, frames, 2)
@@ -309,7 +311,7 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Period:    60,
 			Alias:     "{{LoadBalancer}} Expanded {{InstanceType}} - {{Resource}}",
 		}
-		frames, err := buildDataFrames(*response, query)
+		frames, err := buildDataFrames(startTime, endTime, *response, query)
 		require.NoError(t, err)
 
 		assert.Len(t, frames, 2)
@@ -353,7 +355,7 @@ func TestCloudWatchResponseParser(t *testing.T) {
 			Period:    60,
 			Alias:     "{{namespace}}_{{metric}}_{{stat}}",
 		}
-		frames, err := buildDataFrames(*response, query)
+		frames, err := buildDataFrames(startTime, endTime, *response, query)
 		require.NoError(t, err)
 
 		frame := frames[0]

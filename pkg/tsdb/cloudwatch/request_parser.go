@@ -159,7 +159,6 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 		Alias:          alias,
 		MatchExact:     matchExact,
 		UsedExpression: "",
-		DeepLink:       "",
 	}, nil
 }
 

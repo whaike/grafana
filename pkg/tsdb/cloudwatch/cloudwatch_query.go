@@ -22,7 +22,6 @@ type cloudWatchQuery struct {
 	Alias          string
 	MatchExact     bool
 	UsedExpression string
-	DeepLink       string
 }
 
 func (q *cloudWatchQuery) isMathExpression() bool {
@@ -74,9 +73,9 @@ func (q *cloudWatchQuery) isMultiValuedDimensionExpression() bool {
 	return false
 }
 
-func (q *cloudWatchQuery) generateDeepLink(startTime time.Time, endTime time.Time) error {
+func (q *cloudWatchQuery) buildDeepLink(startTime time.Time, endTime time.Time) (string, error) {
 	if q.isMathExpression() {
-		return nil
+		return "", nil
 	}
 
 	cloudWatchLinkProps := &cloudWatchLink{
@@ -104,12 +103,12 @@ func (q *cloudWatchQuery) generateDeepLink(startTime time.Time, endTime time.Tim
 
 	linkProps, err := json.Marshal(cloudWatchLinkProps)
 	if err != nil {
-		return fmt.Errorf("could not marshal link: %w", err)
+		return "", fmt.Errorf("could not marshal link: %w", err)
 	}
 
 	url, err := url.Parse(fmt.Sprintf(`https://%s.console.aws.amazon.com/cloudwatch/deeplink.js`, q.Region))
 	if err != nil {
-		return fmt.Errorf("unable to parse CloudWatch console deep link")
+		return "", fmt.Errorf("unable to parse CloudWatch console deep link")
 	}
 
 	fragment := url.Query()
@@ -119,7 +118,5 @@ func (q *cloudWatchQuery) generateDeepLink(startTime time.Time, endTime time.Tim
 	query.Set("region", q.Region)
 	url.RawQuery = query.Encode()
 
-	q.DeepLink = fmt.Sprintf(`%s#metricsV2:graph%s`, url.String(), fragment.Encode())
-
-	return nil
+	return fmt.Sprintf(`%s#metricsV2:graph%s`, url.String(), fragment.Encode()), nil
 }

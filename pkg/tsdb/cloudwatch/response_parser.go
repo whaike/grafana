@@ -13,7 +13,7 @@ import (
 	"github.com/grafana/grafana/pkg/components/simplejson"
 )
 
-func (e *cloudWatchExecutor) parseResponse(metricDataOutputs []*cloudwatch.GetMetricDataOutput,
+func (e *cloudWatchExecutor) parseResponse(startTime time.Time, endTime time.Time, metricDataOutputs []*cloudwatch.GetMetricDataOutput,
 	queries map[string]*cloudWatchQuery) ([]*responseWrapper, error) {
 	aggregatedResponse := aggregateResponse(metricDataOutputs)
 	results := []*responseWrapper{}
@@ -27,7 +27,7 @@ func (e *cloudWatchExecutor) parseResponse(metricDataOutputs []*cloudwatch.GetMe
 		}
 
 		var err error
-		dataRes.Frames, err = buildDataFrames(response, queryRow)
+		dataRes.Frames, err = buildDataFrames(startTime, endTime, response, queryRow)
 		if err != nil {
 			return nil, err
 		}
@@ -103,11 +103,16 @@ func getLabels(cloudwatchLabel string, query *cloudWatchQuery) data.Labels {
 	return labels
 }
 
-func buildDataFrames(aggregatedResponse queryRowResponse,
+func buildDataFrames(startTime time.Time, endTime time.Time, aggregatedResponse queryRowResponse,
 	query *cloudWatchQuery) (data.Frames, error) {
 	frames := data.Frames{}
 	for _, label := range aggregatedResponse.Labels {
 		metric := aggregatedResponse.Metrics[label]
+
+		deepLink, err := query.buildDeepLink(startTime, endTime)
+		if err != nil {
+			return nil, err
+		}
 
 		// In case a multi-valued dimension is used and the cloudwatch query yields no values, create one empty time
 		// series for each dimension value. Use that dimension value to expand the alias field
@@ -133,7 +138,7 @@ func buildDataFrames(aggregatedResponse queryRowResponse,
 				valueField := data.NewField(data.TimeSeriesValueFieldName, labels, []*float64{})
 
 				frameName := formatAlias(query, query.Statistic, labels, label)
-				valueField.SetConfig(&data.FieldConfig{DisplayNameFromDS: frameName, Links: createDataLinks(query.DeepLink)})
+				valueField.SetConfig(&data.FieldConfig{DisplayNameFromDS: frameName, Links: createDataLinks(deepLink)})
 
 				emptyFrame := data.Frame{
 					Name: frameName,
@@ -169,7 +174,7 @@ func buildDataFrames(aggregatedResponse queryRowResponse,
 		valueField := data.NewField(data.TimeSeriesValueFieldName, labels, points)
 
 		frameName := formatAlias(query, query.Statistic, labels, label)
-		valueField.SetConfig(&data.FieldConfig{DisplayNameFromDS: frameName, Links: createDataLinks(query.DeepLink)})
+		valueField.SetConfig(&data.FieldConfig{DisplayNameFromDS: frameName, Links: createDataLinks(deepLink)})
 
 		frame := data.Frame{
 			Name: frameName,
