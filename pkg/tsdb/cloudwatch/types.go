@@ -6,24 +6,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
-type requestQuery struct {
-	RefId              string
-	Region             string
-	Id                 string
-	Namespace          string
-	MetricName         string
-	Statistics         []*string
-	Statistic          string
-	QueryType          string
-	Expression         string
-	ReturnData         bool
-	Dimensions         map[string][]string
-	ExtendedStatistics []*string
-	Period             int
-	Alias              string
-	MatchExact         bool
-}
-
 type cloudwatchResponse struct {
 	DataFrames              data.Frames
 	Id                      string
@@ -41,11 +23,6 @@ type queryError struct {
 
 func (e *queryError) Error() string {
 	return fmt.Sprintf("error parsing query %q, %s", e.RefID, e.err)
-}
-
-type executedQuery struct {
-	Expression, ID string
-	Period         int
 }
 
 type cloudWatchLink struct {

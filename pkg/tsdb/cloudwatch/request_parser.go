@@ -40,7 +40,7 @@ func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime
 		}
 
 		if _, exist := requestQueries[query.Region]; !exist {
-			requestQueries[query.Region] = make(map[string]*cloudWatchQuery, 0)
+			requestQueries[query.Region] = make(map[string]*cloudWatchQuery)
 		}
 		requestQueries[query.Region][query.Id] = query
 	}
@@ -99,6 +99,9 @@ func parseRequestQuery(model *simplejson.Json, refId string, startTime time.Time
 	}
 
 	statistic, err := model.Get("statistic").String()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse statistic: %v", err)
+	}
 
 	p := model.Get("period").MustString("")
 	var period int
