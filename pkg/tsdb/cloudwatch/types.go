@@ -2,19 +2,7 @@ package cloudwatch
 
 import (
 	"fmt"
-
-	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
-
-type cloudwatchResponse struct {
-	DataFrames              data.Frames
-	Id                      string
-	RefId                   string
-	Expression              string
-	RequestExceededMaxLimit bool
-	PartialData             bool
-	Period                  int
-}
 
 type queryError struct {
 	err   error

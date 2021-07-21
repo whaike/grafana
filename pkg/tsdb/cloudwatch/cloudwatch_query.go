@@ -95,7 +95,7 @@ func (q *cloudWatchQuery) buildDeepLink(startTime time.Time, endTime time.Time) 
 			metricStat = append(metricStat, dimensionKey, dimensionValues[0])
 		}
 		metricStat = append(metricStat, &metricStatMeta{
-			Stat:   *&q.Statistic,
+			Stat:   q.Statistic,
 			Period: q.Period,
 		})
 		cloudWatchLinkProps.Metrics = []interface{}{metricStat}
