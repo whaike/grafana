@@ -14,11 +14,16 @@ import (
 )
 
 func (e *cloudWatchExecutor) parseResponse(startTime time.Time, endTime time.Time, metricDataOutputs []*cloudwatch.GetMetricDataOutput,
-	queries map[string]*cloudWatchQuery) ([]*responseWrapper, error) {
+	queries []*cloudWatchQuery) ([]*responseWrapper, error) {
 	aggregatedResponse := aggregateResponse(metricDataOutputs)
+	queriesById := map[string]*cloudWatchQuery{}
+	for _, query := range queries {
+		queriesById[query.Id] = query
+	}
+
 	results := []*responseWrapper{}
 	for id, response := range aggregatedResponse {
-		queryRow := queries[id]
+		queryRow := queriesById[id]
 		dataRes := backend.DataResponse{}
 
 		if response.HasArithmeticError {

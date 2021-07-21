@@ -15,8 +15,8 @@ import (
 )
 
 // parses the json queries and returns a map of cloudWatchQueries by region and query id. The cloudWatchQuery has a 1 to 1 mapping to a query editor row
-func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime time.Time, endTime time.Time) (map[string]map[string]*cloudWatchQuery, error) {
-	requestQueries := make(map[string]map[string]*cloudWatchQuery)
+func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime time.Time, endTime time.Time) (map[string][]*cloudWatchQuery, error) {
+	requestQueries := make(map[string][]*cloudWatchQuery)
 	migratedQueries, err := migrateLegacyQuery(queries, startTime, endTime)
 	if err != nil {
 		return nil, err
@@ -40,9 +40,9 @@ func (e *cloudWatchExecutor) parseQueries(queries []backend.DataQuery, startTime
 		}
 
 		if _, exist := requestQueries[query.Region]; !exist {
-			requestQueries[query.Region] = make(map[string]*cloudWatchQuery)
+			requestQueries[query.Region] = []*cloudWatchQuery{}
 		}
-		requestQueries[query.Region][query.Id] = query
+		requestQueries[query.Region] = append(requestQueries[query.Region], query)
 	}
 
 	return requestQueries, nil
