@@ -21,13 +21,6 @@ export enum DataTopic {
   Annotations = 'annotations',
 }
 
-export enum LabelOperators {
-  Equals = '=',
-  NotEquals = '!=',
-  RegexMatch = '=~',
-  NotRegexMatch = '!~',
-}
-
 // Should be kept in sync with grafana-plugin-sdk-go/data/frame_meta.go
 export type PreferredVisualisationType = 'graph' | 'table' | 'logs' | 'trace' | 'nodeGraph';
 
