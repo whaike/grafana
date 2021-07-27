@@ -51,6 +51,9 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => {
       label: verticalScroll;
       white-space: pre;
     `,
+    contextNewline: css`
+      display: inline-block;
+    `,
   };
 });
 
@@ -123,7 +126,7 @@ class UnThemedLogRowMessage extends PureComponent<Props> {
     const styles = getStyles(theme);
 
     return (
-      <td className={style.logsRowMessage}>
+      <td className={style.logsRowMessage} id={`log-row-${row.uid}`}>
         <div className={cx(styles.positionRelative, { [styles.horizontalScroll]: !wrapLogMessage })}>
           {contextIsOpen && context && (
             <LogRowContext
@@ -143,7 +146,10 @@ class UnThemedLogRowMessage extends PureComponent<Props> {
             {renderLogMessage(hasAnsi, restructuredEntry, highlights, highlightClassName)}
           </span>
           {showContextToggle?.(row) && (
-            <span onClick={this.onContextToggle} className={cx('log-row-context', style.context)}>
+            <span
+              onClick={this.onContextToggle}
+              className={cx('log-row-context', style.context, { [styles.contextNewline]: !wrapLogMessage })}
+            >
               {contextIsOpen ? 'Hide' : 'Show'} context
             </span>
           )}

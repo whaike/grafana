@@ -1,4 +1,5 @@
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { GrafanaTheme, DataQueryError, LogRowModel, textUtil } from '@grafana/data';
 import { css, cx } from '@emotion/css';
 
@@ -23,8 +24,7 @@ const getLogRowContextStyles = (theme: GrafanaTheme) => {
   return {
     commonStyles: css`
       position: absolute;
-      width: calc(100% + 20px);
-      left: -13px;
+      min-width: 300px;
       height: 250px;
       z-index: ${theme.zIndex.dropdown};
       overflow: hidden;
@@ -56,7 +56,7 @@ interface LogRowContextGroupHeaderProps {
 }
 interface LogRowContextGroupProps extends LogRowContextGroupHeaderProps {
   rows: Array<string | DataQueryError>;
-  className: string;
+  className?: string;
   error?: string;
 }
 
@@ -107,10 +107,21 @@ export const LogRowContextGroup: React.FunctionComponent<LogRowContextGroupProps
   const { commonStyles, logs } = useStyles(getLogRowContextStyles);
   const [scrollTop, setScrollTop] = useState(0);
   const listContainerRef = useRef<HTMLDivElement>() as React.RefObject<HTMLDivElement>;
+  const [node] = useState(document.createElement('div'));
+  const contextRoot = document.getElementById(`log-row-${row.uid}`)!;
+
+  useEffect(() => {
+    contextRoot.appendChild(node);
+    return () => {
+      contextRoot.removeChild(node);
+    };
+  }, [node, contextRoot]);
 
   useLayoutEffect(() => {
     if (shouldScrollToBottom && listContainerRef.current) {
-      setScrollTop(listContainerRef.current.offsetHeight);
+      // Because React Portal is not a DOM element, we can't get offset height.
+      // We have hardcoded large value to make sure that we scroll to bottom of context container.
+      setScrollTop(2000);
     }
   }, [shouldScrollToBottom]);
 
@@ -121,7 +132,8 @@ export const LogRowContextGroup: React.FunctionComponent<LogRowContextGroupProps
     canLoadMoreRows,
   };
 
-  return (
+  // We are using React Portal to show log context over overflow hidden
+  return ReactDOM.createPortal(
     <div className={cx(className, commonStyles)}>
       {/* When displaying "after" context */}
       {shouldScrollToBottom && !error && <LogRowContextGroupHeader {...headerProps} />}
@@ -150,7 +162,8 @@ export const LogRowContextGroup: React.FunctionComponent<LogRowContextGroupProps
       </div>
       {/* When displaying "before" context */}
       {!shouldScrollToBottom && !error && <LogRowContextGroupHeader {...headerProps} />}
-    </div>
+    </div>,
+    node
   );
 };
 
@@ -185,7 +198,7 @@ export const LogRowContext: React.FunctionComponent<LogRowContextProps> = ({
             error={errors && errors.after}
             row={row}
             className={css`
-              top: -250px;
+              margin-top: -270px;
             `}
             shouldScrollToBottom
             canLoadMoreRows={hasMoreContextRows ? hasMoreContextRows.after : false}
@@ -200,9 +213,6 @@ export const LogRowContext: React.FunctionComponent<LogRowContextProps> = ({
             row={row}
             rows={context.before}
             error={errors && errors.before}
-            className={css`
-              top: 100%;
-            `}
           />
         )}
       </div>
