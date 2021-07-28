@@ -52,7 +52,7 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => {
       white-space: pre;
     `,
     contextNewline: css`
-      display: inline-block;
+      display: block;
     `,
   };
 });
