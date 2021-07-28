@@ -1,0 +1,43 @@
+global:
+  "Ceph Health Warning":
+    expr: ceph_health_status == 1
+    severity: page
+    annotations:
+    summary: "Ceph Health Warning"
+    description: "Overall Ceph Health"
+  "Ceph Health Error":
+    expr: ceph_health_status > 1
+    severity: page
+    annotations:
+    summary: "Ceph Health Error"
+    description: "The Ceph cluster health is in an error state"
+  "Disk(s) Near Full":
+    expr: (ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) * 100 > 85
+    severity: page
+    annotations:
+    summary: "Disk(s) Near Full"
+    description: "This shows how many disks are at or above 85% full. Performance may degrade beyond this threshold on filestore (XFS) backed OSD's."
+  "OSD(s) Down":
+    expr: ceph_osd_up < 0.5
+    severity: page
+    annotations:
+    summary: "OSD(s) Down"
+    description: "This indicates that one or more OSDs is currently marked down in the cluster."
+  "Pool Capacity Low":
+    expr: (ceph_pool_bytes_used / (ceph_pool_bytes_used + ceph_pool_max_avail) * 100 + on (pool_id) group_left (name) (ceph_pool_metadata*0)) > 85
+    severity: page
+    annotations:
+    summary: "Pool Capacity Low"
+    description: "This indicates a low capacity in a pool."
+  "MON(s) Down":
+    expr: ceph_mon_quorum_status != 1
+    severity: page
+    annotations:
+    summary: "MON(s) down"
+    description: "This indicates that one or more MON(s) is down."
+  "Cluster Capacity Low":
+    expr: sum(ceph_osd_stat_bytes_used) / sum(ceph_osd_stat_bytes) > 0.85
+    severity: page
+    annotations:
+    summary: "Cluster Capacity Low"
+    description: "This indicates raw used space crosses the 85% capacity threshold of the ceph cluster."
