@@ -73,6 +73,16 @@ import (
 //       200: AlertGroups
 //       400: ValidationError
 
+// swagger:route POST /api/alertmanager/{Recipient}/config/api/v1/receivers/test alertmanager RoutePostReceiversTest
+//
+// tests the receivers
+//
+//     Responses:
+//
+//       200:
+//       400: ValidationError
+//       408:
+
 // swagger:route GET /api/alertmanager/{Recipient}/api/v2/silences alertmanager RouteGetSilences
 //
 // get silences
@@ -104,6 +114,56 @@ import (
 //     Responses:
 //       200: Ack
 //       400: ValidationError
+
+// swagger:model
+type TestReceiversConfig struct {
+	Receivers []*PostableApiReceiver `yaml:"receivers,omitempty" json:"receivers,omitempty"`
+}
+
+// TODO(gerobinson): This is copied from PostableUserConfig
+func (c *TestReceiversConfig) ProcessConfig() error {
+	seenUIDs := make(map[string]struct{})
+	// encrypt secure settings for storing them in DB
+	for _, r := range c.Receivers {
+		switch r.Type() {
+		case GrafanaReceiverType:
+			for _, gr := range r.PostableGrafanaReceivers.GrafanaManagedReceivers {
+				for k, v := range gr.SecureSettings {
+					encryptedData, err := util.Encrypt([]byte(v), setting.SecretKey)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt secure settings: %w", err)
+					}
+					gr.SecureSettings[k] = base64.StdEncoding.EncodeToString(encryptedData)
+				}
+				if gr.UID == "" {
+					retries := 5
+					for i := 0; i < retries; i++ {
+						gen := util.GenerateShortUID()
+						_, ok := seenUIDs[gen]
+						if !ok {
+							gr.UID = gen
+							break
+						}
+					}
+					if gr.UID == "" {
+						return fmt.Errorf("all %d attempts to generate UID for receiver have failed; please retry", retries)
+					}
+				}
+				seenUIDs[gr.UID] = struct{}{}
+			}
+		default:
+		}
+	}
+	return nil
+}
+
+func (c *TestReceiversConfig) UnmarshalJSON(b []byte) error {
+	type plain TestReceiversConfig
+	if err := json.Unmarshal(b, (*plain)(c)); err != nil {
+		return err
+	}
+	return nil
+}
 
 // swagger:parameters RouteCreateSilence
 type CreateSilenceParams struct {

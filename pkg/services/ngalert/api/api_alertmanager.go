@@ -3,7 +3,12 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/prometheus/alertmanager/notify"
+	"github.com/prometheus/alertmanager/types"
+	"github.com/prometheus/common/model"
+	"golang.org/x/sync/errgroup"
 	"net/http"
+	"time"
 
 	"github.com/grafana/grafana/pkg/api/response"
 	"github.com/grafana/grafana/pkg/infra/log"
@@ -267,4 +272,56 @@ func (srv AlertmanagerSrv) RoutePostAlertingConfig(c *models.ReqContext, body ap
 func (srv AlertmanagerSrv) RoutePostAMAlerts(c *models.ReqContext, body apimodels.PostableAlerts) response.Response {
 	// not implemented
 	return NotImplementedResp
+}
+
+func (srv AlertmanagerSrv) RoutePostReceiversTest(c *models.ReqContext, body apimodels.TestReceiversConfig) response.Response {
+	if !c.HasUserRole(models.ROLE_EDITOR) {
+		return ErrResp(http.StatusForbidden, errors.New("permission denied"), "")
+	}
+
+	if err := body.ProcessConfig(); err != nil {
+		return ErrResp(http.StatusInternalServerError, err, "failed to post process Alertmanager configuration")
+	}
+
+	tmpl, err := srv.am.GetTemplate()
+	if err != nil {
+		response.Error(http.StatusInternalServerError, "", err)
+	}
+
+	integrationsMap, err := srv.am.BuildIntegrationsMap(body.Receivers, tmpl)
+	if err != nil {
+		return response.Error(http.StatusInternalServerError, "", err)
+	}
+
+	ctx := c.Context.Req.Context()
+	// TODO(gerobinson): Find an appropriate group key for tests
+	ctx = notify.WithGroupKey(ctx, time.Now().String())
+
+	testAlert := &types.Alert{
+		Alert: model.Alert{
+			Labels: model.LabelSet{
+				model.LabelName("instance"): "foo",
+			},
+			Annotations: model.LabelSet{},
+			StartsAt:    time.Now(),
+		},
+		UpdatedAt: time.Now(),
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	for _, notifiers := range integrationsMap {
+		for _, next := range notifiers {
+			g.Go(func() error {
+				_, err := next.Notify(ctx, testAlert)
+				return err
+			})
+		}
+	}
+
+	if err := g.Wait(); err != nil {
+		// TODO(gerobinson): Return appropriate response codes for errors
+		return response.Error(http.StatusBadRequest, "", err)
+	}
+
+	return response.JSON(http.StatusOK, nil)
 }

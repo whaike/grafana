@@ -15,6 +15,9 @@ import (
 	"github.com/grafana/grafana/pkg/services/quota"
 	"github.com/grafana/grafana/pkg/setting"
 	"github.com/grafana/grafana/pkg/tsdb"
+
+	"github.com/prometheus/alertmanager/notify"
+	"github.com/prometheus/alertmanager/template"
 )
 
 // timeNow makes it possible to test usage of time
@@ -37,6 +40,9 @@ type Alertmanager interface {
 	// Alerts
 	GetAlerts(active, silenced, inhibited bool, filter []string, receiver string) (apimodels.GettableAlerts, error)
 	GetAlertGroups(active, silenced, inhibited bool, filter []string, receiver string) (apimodels.AlertGroups, error)
+
+	BuildIntegrationsMap([]*apimodels.PostableApiReceiver, *template.Template) (map[string][]notify.Integration, error)
+	GetTemplate() (*template.Template, error)
 }
 
 // API handlers.

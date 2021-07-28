@@ -106,7 +106,8 @@ type Alertmanager struct {
 	dispatcherMetrics *dispatch.DispatcherMetrics
 
 	reloadConfigMtx sync.RWMutex
-	config          []byte
+	config          *apimodels.PostableUserConfig
+	configHash      [16]byte
 }
 
 func New(cfg *setting.Cfg, store store.AlertingStore, m *metrics.Metrics) (*Alertmanager, error) {
@@ -166,7 +167,7 @@ func (am *Alertmanager) Ready() bool {
 	am.reloadConfigMtx.RLock()
 	defer am.reloadConfigMtx.RUnlock()
 
-	return len(am.config) > 0
+	return am.config != nil
 }
 
 func (am *Alertmanager) Run(ctx context.Context) error {
@@ -314,6 +315,32 @@ func (am *Alertmanager) SyncAndApplyConfigFromDatabase(orgID int64) error {
 	return nil
 }
 
+func (am *Alertmanager) GetTemplate() (*template.Template, error) {
+	am.reloadConfigMtx.RLock()
+	defer am.reloadConfigMtx.RUnlock()
+	if am.config != nil {
+		paths := make([]string, 0, len(am.config.TemplateFiles))
+		for name := range am.config.TemplateFiles {
+			paths = append(paths, filepath.Join(am.WorkingDirPath(), name))
+		}
+		return am.getTemplates(paths...)
+	}
+	return nil, errors.New("asd")
+}
+
+func (am *Alertmanager) getTemplates(paths ...string) (*template.Template, error) {
+	tmpl, err := template.FromGlobs(paths...)
+	if err != nil {
+		return nil, err
+	}
+	externalURL, err := url.Parse(am.Settings.AppURL)
+	if err != nil {
+		return nil, err
+	}
+	tmpl.ExternalURL = externalURL
+	return tmpl, nil
+}
+
 // applyConfig applies a new configuration by re-initializing all components using the configuration provided.
 // It is not safe to call concurrently.
 func (am *Alertmanager) applyConfig(cfg *apimodels.PostableUserConfig, rawConfig []byte) (err error) {
@@ -328,7 +355,7 @@ func (am *Alertmanager) applyConfig(cfg *apimodels.PostableUserConfig, rawConfig
 		rawConfig = enc
 	}
 
-	if md5.Sum(am.config) != md5.Sum(rawConfig) {
+	if am.configHash != md5.Sum(rawConfig) {
 		configChanged = true
 	}
 
@@ -350,18 +377,13 @@ func (am *Alertmanager) applyConfig(cfg *apimodels.PostableUserConfig, rawConfig
 	}
 
 	// With the templates persisted, create the template list using the paths.
-	tmpl, err := template.FromGlobs(paths...)
+	tmpl, err := am.getTemplates(paths...)
 	if err != nil {
 		return err
 	}
-	externalURL, err := url.Parse(am.Settings.AppURL)
-	if err != nil {
-		return err
-	}
-	tmpl.ExternalURL = externalURL
 
 	// Finally, build the integrations map using the receiver configuration and templates.
-	integrationsMap, err := am.buildIntegrationsMap(cfg.AlertmanagerConfig.Receivers, tmpl)
+	integrationsMap, err := am.BuildIntegrationsMap(cfg.AlertmanagerConfig.Receivers, tmpl)
 	if err != nil {
 		return err
 	}
@@ -400,7 +422,9 @@ func (am *Alertmanager) applyConfig(cfg *apimodels.PostableUserConfig, rawConfig
 		am.inhibitor.Run()
 	}()
 
-	am.config = rawConfig
+	am.config = cfg
+	am.configHash = md5.Sum(rawConfig)
+
 	return nil
 }
 
@@ -408,8 +432,8 @@ func (am *Alertmanager) WorkingDirPath() string {
 	return filepath.Join(am.Settings.DataPath, workingDir, strconv.Itoa(mainOrgID))
 }
 
-// buildIntegrationsMap builds a map of name to the list of Grafana integration notifiers off of a list of receiver config.
-func (am *Alertmanager) buildIntegrationsMap(receivers []*apimodels.PostableApiReceiver, templates *template.Template) (map[string][]notify.Integration, error) {
+// BuildIntegrationsMap builds a map of name to the list of Grafana integration notifiers off of a list of receiver config.
+func (am *Alertmanager) BuildIntegrationsMap(receivers []*apimodels.PostableApiReceiver, templates *template.Template) (map[string][]notify.Integration, error) {
 	integrationsMap := make(map[string][]notify.Integration, len(receivers))
 	for _, receiver := range receivers {
 		integrations, err := am.buildReceiverIntegrations(receiver, templates)
