@@ -58,6 +58,7 @@ export class PrometheusDatasource extends DataSourceApi<PromQuery, PromOptions> 
   withCredentials: any;
   metricsNameCache = new LRU<string, string[]>(10);
   interval: string;
+  safeInterval: number;
   queryTimeout: string;
   httpMethod: string;
   languageProvider: PrometheusLanguageProvider;
@@ -496,6 +497,7 @@ export class PrometheusDatasource extends DataSourceApi<PromQuery, PromOptions> 
     if (safeInterval > 1) {
       safeInterval = Math.ceil(safeInterval);
     }
+    this.safeInterval = safeInterval;
 
     //Calculate adjusted interval based on the current step option
     let adjustedInterval = safeInterval;
@@ -765,8 +767,8 @@ export class PrometheusDatasource extends DataSourceApi<PromQuery, PromOptions> 
     return expandedQueries;
   }
 
-  getQueryHints(query: PromQuery, result: any[]) {
-    return getQueryHints(query.expr ?? '', result, this);
+  getQueryHints(query: PromQuery, result: any[], safeInterval: number, interval: number) {
+    return getQueryHints(query.expr ?? '', result, this, safeInterval, interval);
   }
 
   getInitHints() {
