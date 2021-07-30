@@ -315,7 +315,130 @@ func (am *Alertmanager) SyncAndApplyConfigFromDatabase(orgID int64) error {
 	return nil
 }
 
-func (am *Alertmanager) GetTemplate() (*template.Template, error) {
+func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestReceiversConfig) (*apimodels.TestReceiversResult, error) {
+	// now represents the start time of the test
+	now := time.Now()
+	testAlert := &types.Alert{
+		Alert: model.Alert{
+			Labels: model.LabelSet{
+				model.LabelName("instance"): "foo",
+			},
+			Annotations: model.LabelSet{},
+			StartsAt:    now,
+		},
+		UpdatedAt: now,
+	}
+
+	// we must set a group key as this is required by some notification channels (i.e. webhook)
+	ctx = notify.WithGroupKey(ctx, testAlert.Labels.String())
+
+	tmpl, err := am.getTemplate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get template: %w", err)
+	}
+
+	integrationsMap, err := am.buildIntegrationsMap(c.Receivers, tmpl)
+	if err != nil {
+		// The request contains invalid config for one or more contact points
+		return nil, fmt.Errorf("failed to create receivers: %w", err)
+	}
+
+	// job contains all metadata required to test a receiver
+	type job struct {
+		Config       *apimodels.PostableGrafanaReceiver
+		ReceiverName string
+		Notifier     notify.Integration
+	}
+
+	// result contains all metadata required to test a receiver
+	// and an error that is non-nil if the test fails
+	type result struct {
+		Config       *apimodels.PostableGrafanaReceiver
+		ReceiverName string
+		Error        error
+	}
+
+	workers := sync.WaitGroup{}
+	numWorkers := 10
+	workCh := make(chan job, numWorkers)
+	resultCh := make(chan result, numWorkers)
+
+	for i := 0; i < numWorkers; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for next := range workCh {
+				v := result{
+					Config:       next.Config,
+					ReceiverName: next.ReceiverName,
+				}
+				if _, err := next.Notifier.Notify(ctx, testAlert); err != nil {
+					v.Error = err
+				}
+				resultCh <- v
+			}
+		}()
+	}
+
+	// start a goroutine that will close the results chan
+	// when all workers have finished
+	go func() {
+		defer close(resultCh)
+		workers.Wait()
+	}()
+
+	// start a goroutine that creates a job per config per receiver
+	go func() {
+		defer close(workCh)
+		for _, receiver := range c.Receivers {
+			for ix := range receiver.GrafanaManagedReceivers {
+				workCh <- job{
+					Config:       receiver.GrafanaManagedReceivers[ix],
+					ReceiverName: receiver.Name,
+					Notifier:     integrationsMap[receiver.Name][ix],
+				}
+			}
+		}
+	}()
+
+	// collate the results from the workers with the correct receivers
+	m := make(map[string]apimodels.TestReceiverResult)
+	for result := range resultCh {
+		tmp := m[result.ReceiverName]
+		tmp.Name = result.ReceiverName
+		status := "ok"
+		if result.Error != nil {
+			status = "failed"
+		}
+		tmp.Configs = append(tmp.Configs, apimodels.TestReceiverConfigResult{
+			Name:   result.Config.Name,
+			Uid:    result.Config.UID,
+			Status: status,
+			Error:  processNotifierError(result.Error),
+		})
+		m[result.ReceiverName] = tmp
+	}
+
+	// prepare the results
+	results := apimodels.TestReceiversResult{
+		Receivers: make([]apimodels.TestReceiverResult, 0, len(c.Receivers)),
+		NotifedAt: now,
+	}
+	for _, next := range m {
+		results.Receivers = append(results.Receivers, next)
+	}
+	return &results, nil
+}
+
+func processNotifierError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	return err.Error()
+}
+
+func (am *Alertmanager) getTemplate() (*template.Template, error) {
 	am.reloadConfigMtx.RLock()
 	defer am.reloadConfigMtx.RUnlock()
 	if am.config != nil {
@@ -323,12 +446,12 @@ func (am *Alertmanager) GetTemplate() (*template.Template, error) {
 		for name := range am.config.TemplateFiles {
 			paths = append(paths, filepath.Join(am.WorkingDirPath(), name))
 		}
-		return am.getTemplates(paths...)
+		return am.templateFromPaths(paths...)
 	}
 	return nil, errors.New("asd")
 }
 
-func (am *Alertmanager) getTemplates(paths ...string) (*template.Template, error) {
+func (am *Alertmanager) templateFromPaths(paths ...string) (*template.Template, error) {
 	tmpl, err := template.FromGlobs(paths...)
 	if err != nil {
 		return nil, err
@@ -377,13 +500,13 @@ func (am *Alertmanager) applyConfig(cfg *apimodels.PostableUserConfig, rawConfig
 	}
 
 	// With the templates persisted, create the template list using the paths.
-	tmpl, err := am.getTemplates(paths...)
+	tmpl, err := am.templateFromPaths(paths...)
 	if err != nil {
 		return err
 	}
 
 	// Finally, build the integrations map using the receiver configuration and templates.
-	integrationsMap, err := am.BuildIntegrationsMap(cfg.AlertmanagerConfig.Receivers, tmpl)
+	integrationsMap, err := am.buildIntegrationsMap(cfg.AlertmanagerConfig.Receivers, tmpl)
 	if err != nil {
 		return err
 	}
@@ -432,8 +555,8 @@ func (am *Alertmanager) WorkingDirPath() string {
 	return filepath.Join(am.Settings.DataPath, workingDir, strconv.Itoa(mainOrgID))
 }
 
-// BuildIntegrationsMap builds a map of name to the list of Grafana integration notifiers off of a list of receiver config.
-func (am *Alertmanager) BuildIntegrationsMap(receivers []*apimodels.PostableApiReceiver, templates *template.Template) (map[string][]notify.Integration, error) {
+// buildIntegrationsMap builds a map of name to the list of Grafana integration notifiers off of a list of receiver config.
+func (am *Alertmanager) buildIntegrationsMap(receivers []*apimodels.PostableApiReceiver, templates *template.Template) (map[string][]notify.Integration, error) {
 	integrationsMap := make(map[string][]notify.Integration, len(receivers))
 	for _, receiver := range receivers {
 		integrations, err := am.buildReceiverIntegrations(receiver, templates)

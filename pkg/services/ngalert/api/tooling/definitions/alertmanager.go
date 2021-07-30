@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/pkg/errors"
@@ -73,7 +74,7 @@ import (
 //       200: AlertGroups
 //       400: ValidationError
 
-// swagger:route POST /api/alertmanager/{Recipient}/config/api/v1/receivers/test alertmanager RoutePostReceiversTest
+// swagger:route POST /api/alertmanager/{Recipient}/config/api/v1/receivers/test alertmanager RoutePostTestReceivers
 //
 // tests the receivers
 //
@@ -155,6 +156,23 @@ func (c *TestReceiversConfig) ProcessConfig() error {
 		}
 	}
 	return nil
+}
+
+type TestReceiversResult struct {
+	Receivers []TestReceiverResult `json:"receivers"`
+	NotifedAt time.Time            `json:"notified_at"`
+}
+
+type TestReceiverResult struct {
+	Name    string                     `json:"name"`
+	Configs []TestReceiverConfigResult `json:"grafana_managed_receiver_configs"`
+}
+
+type TestReceiverConfigResult struct {
+	Name   string `json:"name"`
+	Uid    string `json:"uid"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
 func (c *TestReceiversConfig) UnmarshalJSON(b []byte) error {

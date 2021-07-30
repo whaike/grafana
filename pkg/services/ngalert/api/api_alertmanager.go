@@ -1,12 +1,9 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/prometheus/alertmanager/notify"
-	"github.com/prometheus/alertmanager/types"
-	"github.com/prometheus/common/model"
-	"golang.org/x/sync/errgroup"
 	"net/http"
 	"time"
 
@@ -274,7 +271,7 @@ func (srv AlertmanagerSrv) RoutePostAMAlerts(c *models.ReqContext, body apimodel
 	return NotImplementedResp
 }
 
-func (srv AlertmanagerSrv) RoutePostReceiversTest(c *models.ReqContext, body apimodels.TestReceiversConfig) response.Response {
+func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body apimodels.TestReceiversConfig) response.Response {
 	if !c.HasUserRole(models.ROLE_EDITOR) {
 		return ErrResp(http.StatusForbidden, errors.New("permission denied"), "")
 	}
@@ -283,45 +280,13 @@ func (srv AlertmanagerSrv) RoutePostReceiversTest(c *models.ReqContext, body api
 		return ErrResp(http.StatusInternalServerError, err, "failed to post process Alertmanager configuration")
 	}
 
-	tmpl, err := srv.am.GetTemplate()
-	if err != nil {
-		response.Error(http.StatusInternalServerError, "", err)
-	}
+	ctx, cancelFunc := context.WithTimeout(c.Req.Context(), 2*time.Second)
+	defer cancelFunc()
 
-	integrationsMap, err := srv.am.BuildIntegrationsMap(body.Receivers, tmpl)
+	result, err := srv.am.TestReceivers(ctx, body)
 	if err != nil {
 		return response.Error(http.StatusInternalServerError, "", err)
 	}
 
-	ctx := c.Context.Req.Context()
-	// TODO(gerobinson): Find an appropriate group key for tests
-	ctx = notify.WithGroupKey(ctx, time.Now().String())
-
-	testAlert := &types.Alert{
-		Alert: model.Alert{
-			Labels: model.LabelSet{
-				model.LabelName("instance"): "foo",
-			},
-			Annotations: model.LabelSet{},
-			StartsAt:    time.Now(),
-		},
-		UpdatedAt: time.Now(),
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-	for _, notifiers := range integrationsMap {
-		for _, next := range notifiers {
-			g.Go(func() error {
-				_, err := next.Notify(ctx, testAlert)
-				return err
-			})
-		}
-	}
-
-	if err := g.Wait(); err != nil {
-		// TODO(gerobinson): Return appropriate response codes for errors
-		return response.Error(http.StatusBadRequest, "", err)
-	}
-
-	return response.JSON(http.StatusOK, nil)
+	return response.JSON(http.StatusOK, result)
 }
