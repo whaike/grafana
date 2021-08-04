@@ -42,7 +42,7 @@ type ScheduleService interface {
 
 // Notifier handles the delivery of alert notifications to the end user
 type Notifier interface {
-	PutAlerts(alerts apimodels.PostableAlerts) error
+	PutAlerts(orgID int64, alerts apimodels.PostableAlerts) error
 }
 
 type schedule struct {
@@ -453,7 +453,7 @@ func (sch *schedule) ruleRoutine(grafanaCtx context.Context, key models.AlertRul
 				sch.saveAlertStates(processedStates)
 				alerts := FromAlertStateToPostableAlerts(sch.log, processedStates, sch.stateManager, sch.appURL)
 				sch.log.Debug("sending alerts to notifier", "count", len(alerts.PostableAlerts), "alerts", alerts.PostableAlerts)
-				err = sch.notifier.PutAlerts(alerts)
+				err = sch.notifier.PutAlerts(alertRule.OrgID, alerts)
 				if err != nil {
 					sch.log.Error("failed to put alerts in the notifier", "count", len(alerts.PostableAlerts), "err", err)
 				}
