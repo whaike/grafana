@@ -194,17 +194,5 @@ func (am *LotexAM) RoutePostAMAlerts(ctx *models.ReqContext, alerts apimodels.Po
 }
 
 func (am *LotexAM) RoutePostTestReceivers(ctx *models.ReqContext, config apimodels.TestReceiversConfig) response.Response {
-	yml, err := yaml.Marshal(config)
-	if err != nil {
-		return ErrResp(500, err, "Failed marshal config")
-	}
-
-	return am.withReq(
-		ctx,
-		http.MethodPost,
-		withPath(*ctx.Req.URL, "/api/v1/receivers/test"),
-		bytes.NewBuffer(yml),
-		messageExtractor,
-		nil,
-	)
+	return NotImplementedResp
 }

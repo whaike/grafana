@@ -3,7 +3,6 @@ package channels
 import (
 	"context"
 	"encoding/json"
-
 	"github.com/prometheus/alertmanager/notify"
 	"github.com/prometheus/alertmanager/template"
 	"github.com/prometheus/alertmanager/types"
@@ -31,6 +30,9 @@ type WebhookNotifier struct {
 // NewWebHookNotifier is the constructor for
 // the WebHook notifier.
 func NewWebHookNotifier(model *NotificationChannelConfig, t *template.Template) (*WebhookNotifier, error) {
+	if model.Settings == nil {
+		return nil, receiverInitError{Cfg: *model, Reason: "could not find settings property"}
+	}
 	url := model.Settings.Get("url").MustString()
 	if url == "" {
 		return nil, receiverInitError{Cfg: *model, Reason: "could not find url property in settings"}

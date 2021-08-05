@@ -315,129 +315,6 @@ func (am *Alertmanager) SyncAndApplyConfigFromDatabase(orgID int64) error {
 	return nil
 }
 
-func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestReceiversConfig) (*apimodels.TestReceiversResult, error) {
-	// now represents the start time of the test
-	now := time.Now()
-	testAlert := &types.Alert{
-		Alert: model.Alert{
-			Labels: model.LabelSet{
-				model.LabelName("instance"): "foo",
-			},
-			Annotations: model.LabelSet{},
-			StartsAt:    now,
-		},
-		UpdatedAt: now,
-	}
-
-	// we must set a group key as this is required by some notification channels (i.e. webhook)
-	ctx = notify.WithGroupKey(ctx, testAlert.Labels.String())
-
-	tmpl, err := am.getTemplate()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get template: %w", err)
-	}
-
-	integrationsMap, err := am.buildIntegrationsMap(c.Receivers, tmpl)
-	if err != nil {
-		// The request contains invalid config for one or more contact points
-		return nil, fmt.Errorf("failed to create receivers: %w", err)
-	}
-
-	// job contains all metadata required to test a receiver
-	type job struct {
-		Config       *apimodels.PostableGrafanaReceiver
-		ReceiverName string
-		Notifier     notify.Integration
-	}
-
-	// result contains all metadata required to test a receiver
-	// and an error that is non-nil if the test fails
-	type result struct {
-		Config       *apimodels.PostableGrafanaReceiver
-		ReceiverName string
-		Error        error
-	}
-
-	workers := sync.WaitGroup{}
-	numWorkers := 10
-	workCh := make(chan job, numWorkers)
-	resultCh := make(chan result, numWorkers)
-
-	for i := 0; i < numWorkers; i++ {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			for next := range workCh {
-				v := result{
-					Config:       next.Config,
-					ReceiverName: next.ReceiverName,
-				}
-				if _, err := next.Notifier.Notify(ctx, testAlert); err != nil {
-					v.Error = err
-				}
-				resultCh <- v
-			}
-		}()
-	}
-
-	// start a goroutine that will close the results chan
-	// when all workers have finished
-	go func() {
-		defer close(resultCh)
-		workers.Wait()
-	}()
-
-	// start a goroutine that creates a job per config per receiver
-	go func() {
-		defer close(workCh)
-		for _, receiver := range c.Receivers {
-			for ix := range receiver.GrafanaManagedReceivers {
-				workCh <- job{
-					Config:       receiver.GrafanaManagedReceivers[ix],
-					ReceiverName: receiver.Name,
-					Notifier:     integrationsMap[receiver.Name][ix],
-				}
-			}
-		}
-	}()
-
-	// collate the results from the workers with the correct receivers
-	m := make(map[string]apimodels.TestReceiverResult)
-	for result := range resultCh {
-		tmp := m[result.ReceiverName]
-		tmp.Name = result.ReceiverName
-		status := "ok"
-		if result.Error != nil {
-			status = "failed"
-		}
-		tmp.Configs = append(tmp.Configs, apimodels.TestReceiverConfigResult{
-			Name:   result.Config.Name,
-			Uid:    result.Config.UID,
-			Status: status,
-			Error:  processNotifierError(result.Error),
-		})
-		m[result.ReceiverName] = tmp
-	}
-
-	// prepare the results
-	results := apimodels.TestReceiversResult{
-		Receivers: make([]apimodels.TestReceiverResult, 0, len(c.Receivers)),
-		NotifedAt: now,
-	}
-	for _, next := range m {
-		results.Receivers = append(results.Receivers, next)
-	}
-	return &results, nil
-}
-
-func processNotifierError(err error) string {
-	if err == nil {
-		return ""
-	}
-
-	return err.Error()
-}
-
 func (am *Alertmanager) getTemplate() (*template.Template, error) {
 	am.reloadConfigMtx.RLock()
 	defer am.reloadConfigMtx.RUnlock()
@@ -448,7 +325,7 @@ func (am *Alertmanager) getTemplate() (*template.Template, error) {
 		}
 		return am.templateFromPaths(paths...)
 	}
-	return nil, errors.New("asd")
+	return nil, errors.New("alertmanager is not initialized")
 }
 
 func (am *Alertmanager) templateFromPaths(paths ...string) (*template.Template, error) {
@@ -577,75 +454,93 @@ type NotificationChannel interface {
 // buildReceiverIntegrations builds a list of integration notifiers off of a receiver config.
 func (am *Alertmanager) buildReceiverIntegrations(receiver *apimodels.PostableApiReceiver, tmpl *template.Template) ([]notify.Integration, error) {
 	var integrations []notify.Integration
-
 	for i, r := range receiver.GrafanaManagedReceivers {
-		// secure settings are already encrypted at this point
-		secureSettings := securejsondata.SecureJsonData(make(map[string][]byte, len(r.SecureSettings)))
-
-		for k, v := range r.SecureSettings {
-			d, err := base64.StdEncoding.DecodeString(v)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode secure setting")
-			}
-			secureSettings[k] = d
-		}
-		var (
-			cfg = &channels.NotificationChannelConfig{
-				UID:                   r.UID,
-				Name:                  r.Name,
-				Type:                  r.Type,
-				DisableResolveMessage: r.DisableResolveMessage,
-				Settings:              r.Settings,
-				SecureSettings:        secureSettings,
-			}
-			n   NotificationChannel
-			err error
-		)
-		switch r.Type {
-		case "email":
-			n, err = channels.NewEmailNotifier(cfg, tmpl) // Email notifier already has a default template.
-		case "pagerduty":
-			n, err = channels.NewPagerdutyNotifier(cfg, tmpl)
-		case "pushover":
-			n, err = channels.NewPushoverNotifier(cfg, tmpl)
-		case "slack":
-			n, err = channels.NewSlackNotifier(cfg, tmpl)
-		case "telegram":
-			n, err = channels.NewTelegramNotifier(cfg, tmpl)
-		case "victorops":
-			n, err = channels.NewVictoropsNotifier(cfg, tmpl)
-		case "teams":
-			n, err = channels.NewTeamsNotifier(cfg, tmpl)
-		case "dingding":
-			n, err = channels.NewDingDingNotifier(cfg, tmpl)
-		case "kafka":
-			n, err = channels.NewKafkaNotifier(cfg, tmpl)
-		case "webhook":
-			n, err = channels.NewWebHookNotifier(cfg, tmpl)
-		case "sensugo":
-			n, err = channels.NewSensuGoNotifier(cfg, tmpl)
-		case "discord":
-			n, err = channels.NewDiscordNotifier(cfg, tmpl)
-		case "googlechat":
-			n, err = channels.NewGoogleChatNotifier(cfg, tmpl)
-		case "LINE":
-			n, err = channels.NewLineNotifier(cfg, tmpl)
-		case "threema":
-			n, err = channels.NewThreemaNotifier(cfg, tmpl)
-		case "opsgenie":
-			n, err = channels.NewOpsgenieNotifier(cfg, tmpl)
-		case "prometheus-alertmanager":
-			n, err = channels.NewAlertmanagerNotifier(cfg, tmpl)
-		default:
-			return nil, fmt.Errorf("notifier %s is not supported", r.Type)
-		}
+		n, err := am.buildReceiverIntegration(r, tmpl)
 		if err != nil {
 			return nil, err
 		}
 		integrations = append(integrations, notify.NewIntegration(n, n, r.Type, i))
 	}
-
 	return integrations, nil
+}
+
+func (am *Alertmanager) buildReceiverIntegration(r *apimodels.PostableGrafanaReceiver, tmpl *template.Template) (NotificationChannel, error) {
+	// secure settings are already encrypted at this point
+	secureSettings := securejsondata.SecureJsonData(make(map[string][]byte, len(r.SecureSettings)))
+
+	for k, v := range r.SecureSettings {
+		d, err := base64.StdEncoding.DecodeString(v)
+		if err != nil {
+			return nil, InvalidReceiverError{
+				Receiver: r,
+				Err:      errors.New("failed to decode secure setting"),
+			}
+		}
+		secureSettings[k] = d
+	}
+
+	var (
+		cfg = &channels.NotificationChannelConfig{
+			UID:                   r.UID,
+			Name:                  r.Name,
+			Type:                  r.Type,
+			DisableResolveMessage: r.DisableResolveMessage,
+			Settings:              r.Settings,
+			SecureSettings:        secureSettings,
+		}
+		n   NotificationChannel
+		err error
+	)
+	switch r.Type {
+	case "email":
+		n, err = channels.NewEmailNotifier(cfg, tmpl) // Email notifier already has a default template.
+	case "pagerduty":
+		n, err = channels.NewPagerdutyNotifier(cfg, tmpl)
+	case "pushover":
+		n, err = channels.NewPushoverNotifier(cfg, tmpl)
+	case "slack":
+		n, err = channels.NewSlackNotifier(cfg, tmpl)
+	case "telegram":
+		n, err = channels.NewTelegramNotifier(cfg, tmpl)
+	case "victorops":
+		n, err = channels.NewVictoropsNotifier(cfg, tmpl)
+	case "teams":
+		n, err = channels.NewTeamsNotifier(cfg, tmpl)
+	case "dingding":
+		n, err = channels.NewDingDingNotifier(cfg, tmpl)
+	case "kafka":
+		n, err = channels.NewKafkaNotifier(cfg, tmpl)
+	case "webhook":
+		n, err = channels.NewWebHookNotifier(cfg, tmpl)
+	case "sensugo":
+		n, err = channels.NewSensuGoNotifier(cfg, tmpl)
+	case "discord":
+		n, err = channels.NewDiscordNotifier(cfg, tmpl)
+	case "googlechat":
+		n, err = channels.NewGoogleChatNotifier(cfg, tmpl)
+	case "LINE":
+		n, err = channels.NewLineNotifier(cfg, tmpl)
+	case "threema":
+		n, err = channels.NewThreemaNotifier(cfg, tmpl)
+	case "opsgenie":
+		n, err = channels.NewOpsgenieNotifier(cfg, tmpl)
+	case "prometheus-alertmanager":
+		n, err = channels.NewAlertmanagerNotifier(cfg, tmpl)
+	default:
+		return nil, InvalidReceiverError{
+			Receiver: r,
+			Err:      fmt.Errorf("notifier %s is not supported", r.Type),
+		}
+	}
+
+	if err != nil {
+		return nil, InvalidReceiverError{
+			Receiver: r,
+			Err:      err,
+		}
+	}
+
+	return n, nil
 }
 
 // PutAlerts receives the alerts and then sends them through the corresponding route based on whenever the alert has a receiver embedded or not

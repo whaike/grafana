@@ -280,7 +280,7 @@ func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body api
 		return ErrResp(http.StatusInternalServerError, err, "failed to post process Alertmanager configuration")
 	}
 
-	ctx, cancelFunc := context.WithTimeout(c.Req.Context(), 2*time.Second)
+	ctx, cancelFunc := context.WithTimeout(c.Req.Context(), 15*time.Second)
 	defer cancelFunc()
 
 	result, err := srv.am.TestReceivers(ctx, body)
@@ -288,5 +288,42 @@ func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body api
 		return response.Error(http.StatusInternalServerError, "", err)
 	}
 
-	return response.JSON(http.StatusOK, result)
+	return response.JSON(statusForTestReceivers(result.Receivers), result)
+}
+
+// statusForTestReceivers returns the appropriate status code for the response
+// for the results.
+//
+// It returns an HTTP 200 OK status code if notifications were sent to all receivers,
+// an HTTP 400 Bad Request status code if one or more receivers contain invalid
+// configuration and an HTTP 408 Request Timeout error if all receivers contain
+// valid configuration but one or more receivers timed out when sending the test
+// notification.
+func statusForTestReceivers(v []apimodels.TestReceiverResult) int {
+	var (
+		isBadRequest bool
+		isTimeout    bool
+	)
+	for _, receiver := range v {
+		for _, next := range receiver.Configs {
+			var (
+				invalidReceiverErr notifier.InvalidReceiverError
+				receiverTimeoutErr notifier.ReceiverTimeoutError
+			)
+			if errors.As(next.Error, &invalidReceiverErr) {
+				isBadRequest = true
+			} else if errors.As(next.Error, &receiverTimeoutErr) {
+				isTimeout = true
+			}
+		}
+	}
+
+	switch {
+	case isBadRequest:
+		return http.StatusBadRequest
+	case isTimeout:
+		return http.StatusRequestTimeout
+	default:
+		return http.StatusOK
+	}
 }

@@ -76,11 +76,11 @@ import (
 
 // swagger:route POST /api/alertmanager/{Recipient}/config/api/v1/receivers/test alertmanager RoutePostTestReceivers
 //
-// tests the receivers
+// Test Grafana managed receivers without saving them.
 //
 //     Responses:
 //
-//       200:
+//       200: Ack
 //       400: ValidationError
 //       408:
 
@@ -121,41 +121,8 @@ type TestReceiversConfig struct {
 	Receivers []*PostableApiReceiver `yaml:"receivers,omitempty" json:"receivers,omitempty"`
 }
 
-// TODO(gerobinson): This is copied from PostableUserConfig
 func (c *TestReceiversConfig) ProcessConfig() error {
-	seenUIDs := make(map[string]struct{})
-	// encrypt secure settings for storing them in DB
-	for _, r := range c.Receivers {
-		switch r.Type() {
-		case GrafanaReceiverType:
-			for _, gr := range r.PostableGrafanaReceivers.GrafanaManagedReceivers {
-				for k, v := range gr.SecureSettings {
-					encryptedData, err := util.Encrypt([]byte(v), setting.SecretKey)
-					if err != nil {
-						return fmt.Errorf("failed to encrypt secure settings: %w", err)
-					}
-					gr.SecureSettings[k] = base64.StdEncoding.EncodeToString(encryptedData)
-				}
-				if gr.UID == "" {
-					retries := 5
-					for i := 0; i < retries; i++ {
-						gen := util.GenerateShortUID()
-						_, ok := seenUIDs[gen]
-						if !ok {
-							gr.UID = gen
-							break
-						}
-					}
-					if gr.UID == "" {
-						return fmt.Errorf("all %d attempts to generate UID for receiver have failed; please retry", retries)
-					}
-				}
-				seenUIDs[gr.UID] = struct{}{}
-			}
-		default:
-		}
-	}
-	return nil
+	return processReceiverConfigs(c.Receivers)
 }
 
 type TestReceiversResult struct {
@@ -170,17 +137,28 @@ type TestReceiverResult struct {
 
 type TestReceiverConfigResult struct {
 	Name   string `json:"name"`
-	Uid    string `json:"uid"`
+	UID    string `json:"uid"`
 	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	Error  error  `json:"error,omitempty"`
 }
 
-func (c *TestReceiversConfig) UnmarshalJSON(b []byte) error {
-	type plain TestReceiversConfig
-	if err := json.Unmarshal(b, (*plain)(c)); err != nil {
-		return err
+func (c TestReceiverConfigResult) MarshalJSON() ([]byte, error) {
+	var errstr string
+	if c.Error != nil {
+		errstr = c.Error.Error()
 	}
-	return nil
+	tmp := struct {
+		Name   string `json:"name"`
+		UID    string `json:"uid"`
+		Status string `json:"status"`
+		Error  string `json:"error,omitempty"`
+	}{
+		Name:   c.Name,
+		UID:    c.UID,
+		Status: c.Status,
+		Error:  errstr,
+	}
+	return json.Marshal(tmp)
 }
 
 // swagger:parameters RouteCreateSilence
@@ -423,39 +401,7 @@ func (c *PostableUserConfig) GetGrafanaReceiverMap() map[string]*PostableGrafana
 
 // ProcessConfig parses grafana receivers, encrypts secrets and assigns UUIDs (if they are missing)
 func (c *PostableUserConfig) ProcessConfig() error {
-	seenUIDs := make(map[string]struct{})
-	// encrypt secure settings for storing them in DB
-	for _, r := range c.AlertmanagerConfig.Receivers {
-		switch r.Type() {
-		case GrafanaReceiverType:
-			for _, gr := range r.PostableGrafanaReceivers.GrafanaManagedReceivers {
-				for k, v := range gr.SecureSettings {
-					encryptedData, err := util.Encrypt([]byte(v), setting.SecretKey)
-					if err != nil {
-						return fmt.Errorf("failed to encrypt secure settings: %w", err)
-					}
-					gr.SecureSettings[k] = base64.StdEncoding.EncodeToString(encryptedData)
-				}
-				if gr.UID == "" {
-					retries := 5
-					for i := 0; i < retries; i++ {
-						gen := util.GenerateShortUID()
-						_, ok := seenUIDs[gen]
-						if !ok {
-							gr.UID = gen
-							break
-						}
-					}
-					if gr.UID == "" {
-						return fmt.Errorf("all %d attempts to generate UID for receiver have failed; please retry", retries)
-					}
-				}
-				seenUIDs[gr.UID] = struct{}{}
-			}
-		default:
-		}
-	}
-	return nil
+	return processReceiverConfigs(c.AlertmanagerConfig.Receivers)
 }
 
 // MarshalYAML implements yaml.Marshaller.
@@ -988,4 +934,40 @@ type GettableGrafanaReceivers struct {
 
 type PostableGrafanaReceivers struct {
 	GrafanaManagedReceivers []*PostableGrafanaReceiver `yaml:"grafana_managed_receiver_configs,omitempty" json:"grafana_managed_receiver_configs,omitempty"`
+}
+
+func processReceiverConfigs(c []*PostableApiReceiver) error {
+	seenUIDs := make(map[string]struct{})
+	// encrypt secure settings for storing them in DB
+	for _, r := range c {
+		switch r.Type() {
+		case GrafanaReceiverType:
+			for _, gr := range r.PostableGrafanaReceivers.GrafanaManagedReceivers {
+				for k, v := range gr.SecureSettings {
+					encryptedData, err := util.Encrypt([]byte(v), setting.SecretKey)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt secure settings: %w", err)
+					}
+					gr.SecureSettings[k] = base64.StdEncoding.EncodeToString(encryptedData)
+				}
+				if gr.UID == "" {
+					retries := 5
+					for i := 0; i < retries; i++ {
+						gen := util.GenerateShortUID()
+						_, ok := seenUIDs[gen]
+						if !ok {
+							gr.UID = gen
+							break
+						}
+					}
+					if gr.UID == "" {
+						return fmt.Errorf("all %d attempts to generate UID for receiver have failed; please retry", retries)
+					}
+				}
+				seenUIDs[gr.UID] = struct{}{}
+			}
+		default:
+		}
+	}
+	return nil
 }

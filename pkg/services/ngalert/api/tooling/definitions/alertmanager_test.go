@@ -2,6 +2,7 @@ package definitions
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -669,4 +670,27 @@ func Test_Marshaling_Validation(t *testing.T) {
 
 	expected := []model.LabelName{"alertname"}
 	require.Equal(t, expected, tmp.AlertmanagerConfig.Config.Route.GroupBy)
+}
+
+func TestTestReceiverConfigResult_MarshalJSON(t *testing.T) {
+	t.Run("assert error is marshalled with Error()", func(t *testing.T) {
+		b, err := json.Marshal(TestReceiverConfigResult{
+			Name:   "test",
+			UID:    "uid",
+			Status: "ok",
+			Error:  errors.New("this is an error"),
+		})
+		require.NoError(t, err)
+		require.Equal(t, `{"name":"test","uid":"uid","status":"ok","error":"this is an error"}`, string(b))
+	})
+
+	t.Run("assert nil error is omitted", func(t *testing.T) {
+		b, err := json.Marshal(TestReceiverConfigResult{
+			Name:   "test",
+			UID:    "uid",
+			Status: "ok",
+		})
+		require.NoError(t, err)
+		require.Equal(t, `{"name":"test","uid":"uid","status":"ok"}`, string(b))
+	})
 }
