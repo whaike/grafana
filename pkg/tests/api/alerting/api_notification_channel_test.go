@@ -137,6 +137,73 @@ func TestTestReceivers(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
+
+	t.Run("assert timed out receiver returns 408 Request Timeout", func(t *testing.T) {
+		// Setup Grafana and its Database
+		dir, path := testinfra.CreateGrafDir(t, testinfra.GrafanaOpts{
+			EnableFeatureToggles: []string{"ngalert"},
+		})
+		store := testinfra.SetUpDatabase(t, dir)
+		store.Bus = bus.GetBus()
+		grafanaListedAddr := testinfra.StartGrafana(t, dir, path, store)
+		require.NoError(t, createUser(t,
+			store,
+			models.ROLE_EDITOR,
+			"grafana",
+			"password"))
+
+		oldEmailBus := bus.GetHandlerCtx("SendEmailCommandSync")
+		mockEmails := &mockEmailHandlerWithTimeout{
+			timeout: 5 * time.Second,
+		}
+		bus.AddHandlerCtx("", mockEmails.sendEmailCommandHandlerSync)
+		t.Cleanup(func() {
+			bus.AddHandlerCtx("", oldEmailBus)
+		})
+
+		testReceiversURL := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/receivers/test", grafanaListedAddr)
+		req, err := http.NewRequest(http.MethodPost, testReceiversURL, strings.NewReader(`{
+	"receivers": [{
+		"name":"receiver-1",
+		"grafana_managed_receiver_configs": [
+			{
+				"uid":"receiver-1-config-1",
+				"name":"receiver-1",
+				"type":"email",
+				"disableResolveMessage":false,
+				"settings":{
+					"addresses":"example@email.com"
+				},
+				"secureFields":{}
+			}
+		]
+	}]
+}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Request-Timeout", "1")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusRequestTimeout, resp.StatusCode)
+
+		var result apimodels.TestReceiversResult
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+
+		require.Len(t, result.Receivers, 1)
+		require.Equal(t, apimodels.TestReceiversResult{
+			Receivers: []apimodels.TestReceiverResult{{
+				Name: "receiver-1",
+				Configs: []apimodels.TestReceiverConfigResult{{
+					Name:   "receiver-1",
+					UID:    "receiver-1-config-1",
+					Status: "failed",
+					Error:  "the receiver timed out: context deadline exceeded",
+				}},
+			}},
+			NotifedAt: result.NotifedAt,
+		}, result)
+	})
 }
 
 func TestNotificationChannels(t *testing.T) {
@@ -498,6 +565,21 @@ func (e *mockEmailHandler) sendEmailCommandHandlerSync(_ context.Context, cmd *m
 
 	e.emails = append(e.emails, cmd)
 	return nil
+}
+
+// mockEmailHandlerWithTimeout blocks until the timeout has expired.
+type mockEmailHandlerWithTimeout struct {
+	mockEmailHandler
+	timeout time.Duration
+}
+
+func (e *mockEmailHandlerWithTimeout) sendEmailCommandHandlerSync(ctx context.Context, cmd *models.SendEmailCommandSync) error {
+	select {
+	case <-time.After(e.timeout):
+		return e.mockEmailHandler.sendEmailCommandHandlerSync(ctx, cmd)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // alertmanagerConfig has the config for all the notification channels

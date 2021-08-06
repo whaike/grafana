@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/grafana/grafana/pkg/api/response"
@@ -17,10 +19,77 @@ import (
 	"github.com/grafana/grafana/pkg/util"
 )
 
+const (
+	defaultTestReceiversTimeout = 15 * time.Second
+	maxTestReceiversTimeout     = 30 * time.Second
+)
+
 type AlertmanagerSrv struct {
 	am    Alertmanager
 	store store.AlertingStore
 	log   log.Logger
+}
+
+type UnknownReceiverError struct {
+	UID string
+}
+
+func (e UnknownReceiverError) Error() string {
+	return fmt.Sprintf("unknown receiver: %s", e.UID)
+}
+
+func (srv AlertmanagerSrv) loadSecureSettings(receivers []*apimodels.PostableApiReceiver) error {
+	// Get the last known working configuration
+	query := ngmodels.GetLatestAlertmanagerConfigurationQuery{}
+	if err := srv.store.GetLatestAlertmanagerConfiguration(&query); err != nil {
+		// If we don't have a configuration there's nothing for us to know and we should just continue saving the new one
+		if !errors.Is(err, store.ErrNoAlertmanagerConfiguration) {
+			return fmt.Errorf("failed to get latest configuration: %w", err)
+		}
+	}
+
+	currentReceiverMap := make(map[string]*apimodels.PostableGrafanaReceiver)
+	if query.Result != nil {
+		currentConfig, err := notifier.Load([]byte(query.Result.AlertmanagerConfiguration))
+		if err != nil {
+			return fmt.Errorf("failed to load latest configuration: %w", err)
+		}
+		currentReceiverMap = currentConfig.GetGrafanaReceiverMap()
+	}
+
+	// Copy the previously known secure settings
+	for i, r := range receivers {
+		for j, gr := range r.PostableGrafanaReceivers.GrafanaManagedReceivers {
+			if gr.UID == "" { // new receiver
+				continue
+			}
+
+			cgmr, ok := currentReceiverMap[gr.UID]
+			if !ok {
+				// it tries to update a receiver that didn't previously exist
+				return UnknownReceiverError{UID: gr.UID}
+			}
+
+			// frontend sends only the secure settings that have to be updated
+			// therefore we have to copy from the last configuration only those secure settings not included in the request
+			for key := range cgmr.SecureSettings {
+				_, ok := receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings[key]
+				if !ok {
+					decryptedValue, err := cgmr.GetDecryptedSecret(key)
+					if err != nil {
+						return fmt.Errorf("failed to decrypt stored secure setting: %s: %w", key, err)
+					}
+
+					if receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings == nil {
+						receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings = make(map[string]string, len(cgmr.SecureSettings))
+					}
+
+					receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings[key] = decryptedValue
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (srv AlertmanagerSrv) RouteGetAMStatus(c *models.ReqContext) response.Response {
@@ -212,46 +281,12 @@ func (srv AlertmanagerSrv) RoutePostAlertingConfig(c *models.ReqContext, body ap
 		}
 	}
 
-	currentReceiverMap := make(map[string]*apimodels.PostableGrafanaReceiver)
-	if query.Result != nil {
-		currentConfig, err := notifier.Load([]byte(query.Result.AlertmanagerConfiguration))
-		if err != nil {
-			return ErrResp(http.StatusInternalServerError, err, "failed to load lastest configuration")
+	if err := srv.loadSecureSettings(body.AlertmanagerConfig.Receivers); err != nil {
+		var unknownReceiverError *UnknownReceiverError
+		if errors.As(err, &unknownReceiverError) {
+			return ErrResp(http.StatusBadRequest, err, "")
 		}
-		currentReceiverMap = currentConfig.GetGrafanaReceiverMap()
-	}
-
-	// Copy the previously known secure settings
-	for i, r := range body.AlertmanagerConfig.Receivers {
-		for j, gr := range r.PostableGrafanaReceivers.GrafanaManagedReceivers {
-			if gr.UID == "" { // new receiver
-				continue
-			}
-
-			cgmr, ok := currentReceiverMap[gr.UID]
-			if !ok {
-				// it tries to update a receiver that didn't previously exist
-				return ErrResp(http.StatusBadRequest, fmt.Errorf("unknown receiver: %s", gr.UID), "")
-			}
-
-			// frontend sends only the secure settings that have to be updated
-			// therefore we have to copy from the last configuration only those secure settings not included in the request
-			for key := range cgmr.SecureSettings {
-				_, ok := body.AlertmanagerConfig.Receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings[key]
-				if !ok {
-					decryptedValue, err := cgmr.GetDecryptedSecret(key)
-					if err != nil {
-						return ErrResp(http.StatusInternalServerError, err, "failed to decrypt stored secure setting: %s", key)
-					}
-
-					if body.AlertmanagerConfig.Receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings == nil {
-						body.AlertmanagerConfig.Receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings = make(map[string]string, len(cgmr.SecureSettings))
-					}
-
-					body.AlertmanagerConfig.Receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings[key] = decryptedValue
-				}
-			}
-		}
+		return ErrResp(http.StatusInternalServerError, err, "")
 	}
 
 	if err := body.ProcessConfig(); err != nil {
@@ -276,11 +311,26 @@ func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body api
 		return ErrResp(http.StatusForbidden, errors.New("permission denied"), "")
 	}
 
+	if err := srv.loadSecureSettings(body.Receivers); err != nil {
+		var unknownReceiverError *UnknownReceiverError
+		if errors.As(err, &unknownReceiverError) {
+			return ErrResp(http.StatusBadRequest, err, "")
+		}
+		return ErrResp(http.StatusInternalServerError, err, "")
+	}
+
 	if err := body.ProcessConfig(); err != nil {
 		return ErrResp(http.StatusInternalServerError, err, "failed to post process Alertmanager configuration")
 	}
 
-	ctx, cancelFunc := context.WithTimeout(c.Req.Context(), 15*time.Second)
+	ctx, cancelFunc, err := contextWithTimeoutFromRequest(
+		c.Req.Context(),
+		c.Req.Request,
+		defaultTestReceiversTimeout,
+		maxTestReceiversTimeout)
+	if err != nil {
+		return ErrResp(http.StatusBadRequest, err, "")
+	}
 	defer cancelFunc()
 
 	result, err := srv.am.TestReceivers(ctx, body)
@@ -288,7 +338,50 @@ func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body api
 		return response.Error(http.StatusInternalServerError, "", err)
 	}
 
-	return response.JSON(statusForTestReceivers(result.Receivers), result)
+	return response.JSON(statusForTestReceivers(result.Receivers), newTestReceiversResult(result))
+}
+
+// contextWithTimeoutFromRequest returns a context with a deadline set from the
+// Request-Timeout header in the HTTP request. If the header is absent then the
+// context will use the default timeout. The timeout in the Request-Timeout
+// header cannot exceed the maximum timeout.
+func contextWithTimeoutFromRequest(ctx context.Context, r *http.Request, defaultTimeout, maxTimeout time.Duration) (context.Context, context.CancelFunc, error) {
+	timeout := defaultTimeout
+	if s := strings.TrimSpace(r.Header.Get("Request-Timeout")); s != "" {
+		// the timeout is measured in seconds
+		v, err := strconv.ParseInt(s, 10, 16)
+		if err != nil {
+			return nil, nil, err
+		}
+		if d := time.Duration(v) * time.Second; d < maxTimeout {
+			timeout = d
+		} else {
+			return nil, nil, errors.New("exceeded maximum timeout")
+		}
+	}
+	ctx, cancelFunc := context.WithTimeout(ctx, timeout)
+	return ctx, cancelFunc, nil
+}
+
+func newTestReceiversResult(r *notifier.TestReceiversResult) apimodels.TestReceiversResult {
+	v := apimodels.TestReceiversResult{
+		Receivers: make([]apimodels.TestReceiverResult, len(r.Receivers)),
+		NotifedAt: r.NotifedAt,
+	}
+	for ix, next := range r.Receivers {
+		configs := make([]apimodels.TestReceiverConfigResult, len(next.Configs))
+		for jx, config := range next.Configs {
+			configs[jx].Name = config.Name
+			configs[jx].UID = config.UID
+			configs[jx].Status = config.Status
+			if config.Error != nil {
+				configs[jx].Error = config.Error.Error()
+			}
+		}
+		v.Receivers[ix].Configs = configs
+		v.Receivers[ix].Name = next.Name
+	}
+	return v
 }
 
 // statusForTestReceivers returns the appropriate status code for the response
@@ -299,7 +392,7 @@ func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body api
 // configuration and an HTTP 408 Request Timeout error if all receivers contain
 // valid configuration but one or more receivers timed out when sending the test
 // notification.
-func statusForTestReceivers(v []apimodels.TestReceiverResult) int {
+func statusForTestReceivers(v []notifier.TestReceiverResult) int {
 	var (
 		isBadRequest bool
 		isTimeout    bool
@@ -317,13 +410,11 @@ func statusForTestReceivers(v []apimodels.TestReceiverResult) int {
 			}
 		}
 	}
-
-	switch {
-	case isBadRequest:
+	if isBadRequest {
 		return http.StatusBadRequest
-	case isTimeout:
+	} else if isTimeout {
 		return http.StatusRequestTimeout
-	default:
+	} else {
 		return http.StatusOK
 	}
 }

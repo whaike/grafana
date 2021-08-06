@@ -125,40 +125,24 @@ func (c *TestReceiversConfig) ProcessConfig() error {
 	return processReceiverConfigs(c.Receivers)
 }
 
+// swagger:model
 type TestReceiversResult struct {
 	Receivers []TestReceiverResult `json:"receivers"`
 	NotifedAt time.Time            `json:"notified_at"`
 }
 
+// swagger:model
 type TestReceiverResult struct {
 	Name    string                     `json:"name"`
 	Configs []TestReceiverConfigResult `json:"grafana_managed_receiver_configs"`
 }
 
+// swagger:model
 type TestReceiverConfigResult struct {
 	Name   string `json:"name"`
 	UID    string `json:"uid"`
 	Status string `json:"status"`
-	Error  error  `json:"error,omitempty"`
-}
-
-func (c TestReceiverConfigResult) MarshalJSON() ([]byte, error) {
-	var errstr string
-	if c.Error != nil {
-		errstr = c.Error.Error()
-	}
-	tmp := struct {
-		Name   string `json:"name"`
-		UID    string `json:"uid"`
-		Status string `json:"status"`
-		Error  string `json:"error,omitempty"`
-	}{
-		Name:   c.Name,
-		UID:    c.UID,
-		Status: c.Status,
-		Error:  errstr,
-	}
-	return json.Marshal(tmp)
+	Error  string `json:"error,omitempty"`
 }
 
 // swagger:parameters RouteCreateSilence

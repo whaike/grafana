@@ -18,6 +18,23 @@ const (
 	maxTestReceiversWorkers = 10
 )
 
+type TestReceiversResult struct {
+	Receivers []TestReceiverResult
+	NotifedAt time.Time
+}
+
+type TestReceiverResult struct {
+	Name    string
+	Configs []TestReceiverConfigResult
+}
+
+type TestReceiverConfigResult struct {
+	Name   string
+	UID    string
+	Status string
+	Error  error
+}
+
 type InvalidReceiverError struct {
 	Receiver *apimodels.PostableGrafanaReceiver
 	Err      error
@@ -36,7 +53,7 @@ func (e ReceiverTimeoutError) Error() string {
 	return fmt.Sprintf("the receiver timed out: %s", e.Err)
 }
 
-func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestReceiversConfig) (*apimodels.TestReceiversResult, error) {
+func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestReceiversConfig) (*TestReceiversResult, error) {
 	// now represents the start time of the test
 	now := time.Now()
 	testAlert := &types.Alert{
@@ -128,17 +145,17 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 	close(resultCh)
 
 	// m keeps track of the results for each of the receivers
-	m := make(map[string]apimodels.TestReceiverResult)
+	m := make(map[string]TestReceiverResult)
 	for _, receiver := range c.Receivers {
 		// set up the result for this receiver
-		m[receiver.Name] = apimodels.TestReceiverResult{
+		m[receiver.Name] = TestReceiverResult{
 			Name:    receiver.Name,
-			Configs: make([]apimodels.TestReceiverConfigResult, 0, len(receiver.GrafanaManagedReceivers)),
+			Configs: make([]TestReceiverConfigResult, 0, len(receiver.GrafanaManagedReceivers)),
 		}
 	}
 	for _, next := range invalid {
 		v := m[next.ReceiverName]
-		v.Configs = append(v.Configs, apimodels.TestReceiverConfigResult{
+		v.Configs = append(v.Configs, TestReceiverConfigResult{
 			Name:   next.Config.Name,
 			UID:    next.Config.UID,
 			Status: "failed",
@@ -152,7 +169,7 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 		if next.Error != nil {
 			status = "failed"
 		}
-		v.Configs = append(v.Configs, apimodels.TestReceiverConfigResult{
+		v.Configs = append(v.Configs, TestReceiverConfigResult{
 			Name:   next.Config.Name,
 			UID:    next.Config.UID,
 			Status: status,
@@ -161,8 +178,8 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 		m[next.ReceiverName] = v
 	}
 
-	results := apimodels.TestReceiversResult{
-		Receivers: make([]apimodels.TestReceiverResult, 0, len(c.Receivers)),
+	results := TestReceiversResult{
+		Receivers: make([]TestReceiverResult, 0, len(c.Receivers)),
 		NotifedAt: now,
 	}
 	for _, next := range m {
