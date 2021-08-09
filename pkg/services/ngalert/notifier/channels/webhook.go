@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/prometheus/alertmanager/notify"
 	"github.com/prometheus/alertmanager/template"
 	"github.com/prometheus/alertmanager/types"

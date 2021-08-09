@@ -3,9 +3,10 @@ package notifier
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/require"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions"
 )

@@ -147,12 +147,11 @@ func (am *ForkedAMSvc) RoutePostAMAlerts(ctx *models.ReqContext, body apimodels.
 	return s.RoutePostAMAlerts(ctx, body)
 }
 
-func (am *ForkedAMSvc) RoutePostTestReceivers(ctx *models.ReqContext, body apimodels.TestReceiversConfig) response.Response {
+func (am *ForkedAMSvc) RoutePostTestReceivers(ctx *models.ReqContext, body apimodels.TestReceiversConfigParams) response.Response {
 	s, err := am.getService(ctx)
 	if err != nil {
 		return ErrResp(400, err, "")
 	}
 
 	return s.RoutePostTestReceivers(ctx, body)
-
 }

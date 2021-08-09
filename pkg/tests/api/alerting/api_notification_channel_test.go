@@ -53,12 +53,13 @@ func TestTestReceivers(t *testing.T) {
 		})
 
 		testReceiversURL := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/receivers/test", grafanaListedAddr)
+		// nolint:gosec
 		resp, err := http.Post(testReceiversURL, "application/json", strings.NewReader(`{
 	"receivers": [{
 		"name":"receiver-1",
 		"grafana_managed_receiver_configs": [
 			{
-				"uid":"receiver-1-config-1",
+				"uid":"",
 				"name":"receiver-1",
 				"type":"email",
 				"disableResolveMessage":false,
@@ -81,12 +82,13 @@ func TestTestReceivers(t *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
 
 		require.Len(t, result.Receivers, 1)
+		require.Len(t, result.Receivers[0].Configs, 1)
 		require.Equal(t, apimodels.TestReceiversResult{
 			Receivers: []apimodels.TestReceiverResult{{
 				Name: "receiver-1",
 				Configs: []apimodels.TestReceiverConfigResult{{
 					Name:   "receiver-1",
-					UID:    "receiver-1-config-1",
+					UID:    result.Receivers[0].Configs[0].UID,
 					Status: "ok",
 				}},
 			}},
@@ -119,6 +121,7 @@ func TestTestReceivers(t *testing.T) {
 		})
 
 		testReceiversURL := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/receivers/test", grafanaListedAddr)
+		// nolint:gosec
 		resp, err := http.Post(testReceiversURL, "application/json", strings.NewReader(`{
 	"receivers": [{
 		"name":"receiver-1",
@@ -135,6 +138,9 @@ func TestTestReceivers(t *testing.T) {
 	}]
 }`))
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, resp.Body.Close())
+		})
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
@@ -167,7 +173,7 @@ func TestTestReceivers(t *testing.T) {
 		"name":"receiver-1",
 		"grafana_managed_receiver_configs": [
 			{
-				"uid":"receiver-1-config-1",
+				"uid":"",
 				"name":"receiver-1",
 				"type":"email",
 				"disableResolveMessage":false,
@@ -185,18 +191,22 @@ func TestTestReceivers(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, resp.Body.Close())
+		})
 		require.Equal(t, http.StatusRequestTimeout, resp.StatusCode)
 
 		var result apimodels.TestReceiversResult
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
 
 		require.Len(t, result.Receivers, 1)
+		require.Len(t, result.Receivers[0].Configs, 1)
 		require.Equal(t, apimodels.TestReceiversResult{
 			Receivers: []apimodels.TestReceiverResult{{
 				Name: "receiver-1",
 				Configs: []apimodels.TestReceiverConfigResult{{
 					Name:   "receiver-1",
-					UID:    "receiver-1-config-1",
+					UID:    result.Receivers[0].Configs[0].UID,
 					Status: "failed",
 					Error:  "the receiver timed out: context deadline exceeded",
 				}},

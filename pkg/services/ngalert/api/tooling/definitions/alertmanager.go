@@ -121,7 +121,12 @@ type TestReceiversConfig struct {
 	Receivers []*PostableApiReceiver `yaml:"receivers,omitempty" json:"receivers,omitempty"`
 }
 
-func (c *TestReceiversConfig) ProcessConfig() error {
+// swagger:parameters RoutePostTestReceivers
+type TestReceiversConfigParams struct {
+	Receivers []*PostableApiReceiver `yaml:"receivers,omitempty" json:"receivers,omitempty"`
+}
+
+func (c *TestReceiversConfigParams) ProcessConfig() error {
 	return processReceiverConfigs(c.Receivers)
 }
 

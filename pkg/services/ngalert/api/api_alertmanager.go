@@ -282,7 +282,7 @@ func (srv AlertmanagerSrv) RoutePostAlertingConfig(c *models.ReqContext, body ap
 	}
 
 	if err := srv.loadSecureSettings(body.AlertmanagerConfig.Receivers); err != nil {
-		var unknownReceiverError *UnknownReceiverError
+		var unknownReceiverError UnknownReceiverError
 		if errors.As(err, &unknownReceiverError) {
 			return ErrResp(http.StatusBadRequest, err, "")
 		}
@@ -306,13 +306,13 @@ func (srv AlertmanagerSrv) RoutePostAMAlerts(c *models.ReqContext, body apimodel
 	return NotImplementedResp
 }
 
-func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body apimodels.TestReceiversConfig) response.Response {
+func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body apimodels.TestReceiversConfigParams) response.Response {
 	if !c.HasUserRole(models.ROLE_EDITOR) {
 		return ErrResp(http.StatusForbidden, errors.New("permission denied"), "")
 	}
 
 	if err := srv.loadSecureSettings(body.Receivers); err != nil {
-		var unknownReceiverError *UnknownReceiverError
+		var unknownReceiverError UnknownReceiverError
 		if errors.As(err, &unknownReceiverError) {
 			return ErrResp(http.StatusBadRequest, err, "")
 		}

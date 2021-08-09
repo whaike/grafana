@@ -167,6 +167,10 @@ func (am *Alertmanager) Ready() bool {
 	am.reloadConfigMtx.RLock()
 	defer am.reloadConfigMtx.RUnlock()
 
+	return am.ready()
+}
+
+func (am *Alertmanager) ready() bool {
 	return am.config != nil
 }
 
@@ -318,14 +322,14 @@ func (am *Alertmanager) SyncAndApplyConfigFromDatabase(orgID int64) error {
 func (am *Alertmanager) getTemplate() (*template.Template, error) {
 	am.reloadConfigMtx.RLock()
 	defer am.reloadConfigMtx.RUnlock()
-	if am.config != nil {
-		paths := make([]string, 0, len(am.config.TemplateFiles))
-		for name := range am.config.TemplateFiles {
-			paths = append(paths, filepath.Join(am.WorkingDirPath(), name))
-		}
-		return am.templateFromPaths(paths...)
+	if !am.ready() {
+		return nil, errors.New("alertmanager is not initialized")
 	}
-	return nil, errors.New("alertmanager is not initialized")
+	paths := make([]string, 0, len(am.config.TemplateFiles))
+	for name := range am.config.TemplateFiles {
+		paths = append(paths, filepath.Join(am.WorkingDirPath(), name))
+	}
+	return am.templateFromPaths(paths...)
 }
 
 func (am *Alertmanager) templateFromPaths(paths ...string) (*template.Template, error) {
