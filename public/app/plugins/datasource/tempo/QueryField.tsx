@@ -1,31 +1,55 @@
 import { css } from '@emotion/css';
-import { DataQuery, DataSourceApi, ExploreQueryFieldProps } from '@grafana/data';
+import { DataSourceApi, ExploreQueryFieldProps, SelectableValue } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
-import { getDataSourceSrv } from '@grafana/runtime';
+import { config, getDataSourceSrv } from '@grafana/runtime';
 import {
+  BracesPlugin,
   FileDropzone,
   InlineField,
   InlineFieldRow,
   InlineLabel,
   LegacyForms,
+  QueryField,
   RadioButtonGroup,
+  SlatePrism,
   Themeable2,
+  TypeaheadInput,
+  TypeaheadOutput,
   withTheme2,
 } from '@grafana/ui';
 import { TraceToLogsOptions } from 'app/core/components/TraceToLogsSettings';
+import Prism from 'prismjs';
 import React from 'react';
+import { Node } from 'slate';
 import { LokiQueryField } from '../loki/components/LokiQueryField';
+import { LokiQuery } from '../loki/types';
+import { AdvancedOptions } from './AdvancedOptions';
 import { TempoDatasource, TempoQuery, TempoQueryType } from './datasource';
+import { tokenizer } from './syntax';
 
 interface Props extends ExploreQueryFieldProps<TempoDatasource, TempoQuery>, Themeable2 {}
 
 const DEFAULT_QUERY_TYPE: TempoQueryType = 'traceId';
 interface State {
   linkedDatasource?: DataSourceApi;
+  hasSyntaxLoaded: boolean;
 }
+
+const PRISM_LANGUAGE = 'tempo';
+const plugins = [
+  BracesPlugin(),
+  SlatePrism({
+    onlyIn: (node: Node) => node.object === 'block' && node.type === 'code_block',
+    getSyntax: () => PRISM_LANGUAGE,
+  }),
+];
+
+Prism.languages[PRISM_LANGUAGE] = tokenizer;
+
 class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
   state = {
     linkedDatasource: undefined,
+    hasSyntaxLoaded: false,
   };
 
   constructor(props: Props) {
@@ -44,9 +68,18 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
         linkedDatasource,
       });
     }
+
+    if (config.featureToggles.tempoSearch) {
+      await this.fetchAutocomplete();
+    }
   }
 
-  onChangeLinkedQuery = (value: DataQuery) => {
+  async fetchAutocomplete() {
+    await this.props.datasource.languageProvider.start();
+    this.setState({ hasSyntaxLoaded: true });
+  }
+
+  onChangeLinkedQuery = (value: LokiQuery) => {
     const { query, onChange } = this.props;
     onChange({
       ...query,
@@ -58,20 +91,35 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
     this.props.onRunQuery();
   };
 
+  onTypeahead = async (typeahead: TypeaheadInput): Promise<TypeaheadOutput> => {
+    const languageProvider = this.props.datasource.languageProvider;
+    return await languageProvider.provideCompletionItems(typeahead);
+  };
+
+  cleanText = (text: string) => {
+    const splittedText = text.split(/\s+(?=([^"]*"[^"]*")*[^"]*$)/g);
+    if (splittedText.length > 1) {
+      return splittedText[splittedText.length - 1];
+    }
+    return text;
+  };
+
   render() {
     const { query, onChange } = this.props;
     const { linkedDatasource } = this.state;
+
+    const queryTypeOptions: Array<SelectableValue<TempoQueryType>> = [
+      { value: 'search', label: 'Search' },
+      { value: 'traceId', label: 'TraceID' },
+      { value: 'upload', label: 'JSON file' },
+    ];
 
     return (
       <>
         <InlineFieldRow>
           <InlineField label="Query type">
             <RadioButtonGroup<TempoQueryType>
-              options={[
-                { value: 'search', label: 'Search' },
-                { value: 'traceId', label: 'TraceID' },
-                { value: 'upload', label: 'JSON file' },
-              ]}
+              options={queryTypeOptions}
               value={query.queryType || DEFAULT_QUERY_TYPE}
               onChange={(v) =>
                 onChange({
@@ -83,24 +131,60 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
             />
           </InlineField>
         </InlineFieldRow>
-        {query.queryType === 'search' && linkedDatasource && (
+        {query.queryType === 'search' && (
           <>
-            <InlineLabel>
-              Tempo uses {((linkedDatasource as unknown) as DataSourceApi).name} to find traces.
-            </InlineLabel>
+            {config.featureToggles.tempoSearch ? (
+              <>
+                <InlineFieldRow>
+                  <InlineField label="Query" labelWidth={21} grow>
+                    <QueryField
+                      additionalPlugins={plugins}
+                      query={query.search}
+                      onTypeahead={this.onTypeahead}
+                      onBlur={this.props.onBlur}
+                      onChange={(value) => {
+                        onChange({
+                          ...query,
+                          search: value,
+                        });
+                      }}
+                      cleanText={this.cleanText}
+                      onRunQuery={this.onRunLinkedQuery}
+                      syntaxLoaded={this.state.hasSyntaxLoaded}
+                      portalOrigin="tempo"
+                    />
+                  </InlineField>
+                </InlineFieldRow>
+                <div className={css({ width: '50%' })}>
+                  <AdvancedOptions query={query} onChange={onChange} />
+                </div>
+              </>
+            ) : (
+              <>
+                {!linkedDatasource ? (
+                  <div className="text-warning">
+                    Please set up a Traces-to-logs datasource in the datasource settings.
+                  </div>
+                ) : (
+                  <>
+                    <InlineLabel>
+                      Tempo uses {((linkedDatasource as unknown) as DataSourceApi).name} to find traces.
+                    </InlineLabel>
 
-            <LokiQueryField
-              datasource={linkedDatasource!}
-              onChange={this.onChangeLinkedQuery}
-              onRunQuery={this.onRunLinkedQuery}
-              query={this.props.query.linkedQuery ?? ({ refId: 'linked' } as any)}
-              history={[]}
-            />
+                    <LokiQueryField
+                      datasource={linkedDatasource!}
+                      onChange={this.onChangeLinkedQuery}
+                      onRunQuery={this.onRunLinkedQuery}
+                      query={this.props.query.linkedQuery ?? ({ refId: 'linked' } as any)}
+                      history={[]}
+                    />
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
-        {query.queryType === 'search' && !linkedDatasource && (
-          <div className="text-warning">Please set up a Traces-to-logs datasource in the datasource settings.</div>
-        )}
+
         {query.queryType === 'upload' && (
           <div className={css({ padding: this.props.theme.spacing(2) })}>
             <FileDropzone
