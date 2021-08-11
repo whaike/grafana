@@ -309,10 +309,6 @@ func (hs *HTTPServer) configureHttp2() error {
 func (hs *HTTPServer) newMacaron() *macaron.Macaron {
 	macaron.Env = hs.Cfg.Env
 	m := macaron.New()
-
-	// automatically set HEAD for every GET
-	m.SetAutoHead(true)
-
 	return m
 }
 
