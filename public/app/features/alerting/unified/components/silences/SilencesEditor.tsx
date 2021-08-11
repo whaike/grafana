@@ -1,4 +1,9 @@
-import { Silence, SilenceCreatePayload } from 'app/plugins/datasource/alertmanager/types';
+import {
+  Matcher,
+  MatcherOperatorOptions,
+  Silence,
+  SilenceCreatePayload,
+} from 'app/plugins/datasource/alertmanager/types';
 import React, { FC, useMemo, useState } from 'react';
 import { Button, Field, FieldSet, Input, LinkButton, TextArea, useStyles } from '@grafana/ui';
 import {
@@ -26,6 +31,7 @@ import { makeAMLink } from '../../utils/misc';
 import { useCleanup } from 'app/core/hooks/useCleanup';
 import { useQueryParams } from 'app/core/hooks/useQueryParams';
 import { parseQueryParamMatchers } from '../../utils/matchers';
+import { matcherToOperatorOption, matcherOptionToOperatorValue } from '../../utils/alertmanager';
 
 interface Props {
   silence?: Silence;
@@ -40,7 +46,11 @@ const defaultsFromQuery = (queryParams: UrlQueryMap): Partial<SilenceFormFields>
   if (typeof matchers === 'string') {
     const formMatchers = parseQueryParamMatchers(matchers);
     if (formMatchers.length) {
-      defaults.matchers = formMatchers;
+      defaults.matchers = formMatchers.map((matcher) => ({
+        name: matcher.name,
+        value: matcher.value,
+        operator: matcherToOperatorOption(matcher),
+      }));
     }
   }
 
@@ -69,7 +79,12 @@ const getDefaultFormValues = (queryParams: UrlQueryMap, silence?: Silence): Sile
       createdBy: silence.createdBy,
       duration: intervalToAbbreviatedDurationString(interval),
       isRegex: false,
-      matchers: silence.matchers || [],
+      matchers:
+        silence.matchers?.map((matcher) => ({
+          name: matcher.name,
+          value: matcher.value,
+          operator: matcherToOperatorOption(matcher),
+        })) || [],
       matcherName: '',
       matcherValue: '',
       timeZone: DefaultTimeZone,
@@ -84,7 +99,7 @@ const getDefaultFormValues = (queryParams: UrlQueryMap, silence?: Silence): Sile
       createdBy: config.bootData.user.name,
       duration: '2h',
       isRegex: false,
-      matchers: [{ name: '', value: '', isRegex: false, isEqual: true }],
+      matchers: [{ name: '', value: '', operator: MatcherOperatorOptions.equal }],
       matcherName: '',
       matcherValue: '',
       timeZone: DefaultTimeZone,
@@ -107,7 +122,14 @@ export const SilencesEditor: FC<Props> = ({ silence, alertManagerSourceName }) =
   const { register, handleSubmit, formState, watch, setValue, clearErrors } = formAPI;
 
   const onSubmit = (data: SilenceFormFields) => {
-    const { id, startsAt, endsAt, comment, createdBy, matchers } = data;
+    const { id, startsAt, endsAt, comment, createdBy, matchers: matchersFields } = data;
+    const matchers = matchersFields.map((field) => {
+      return {
+        name: field.name,
+        value: field.value,
+        ...matcherOptionToOperatorValue(field.operator),
+      } as Matcher;
+    });
     const payload = pickBy(
       {
         id,
