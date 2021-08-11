@@ -8,6 +8,7 @@ import {
   InlineField,
   InlineFieldRow,
   InlineLabel,
+  Input,
   LegacyForms,
   QueryField,
   RadioButtonGroup,
@@ -23,7 +24,6 @@ import React from 'react';
 import { Node } from 'slate';
 import { LokiQueryField } from '../loki/components/LokiQueryField';
 import { LokiQuery } from '../loki/types';
-import { AdvancedOptions } from './AdvancedOptions';
 import { TempoDatasource, TempoQuery, TempoQueryType } from './datasource';
 import { tokenizer } from './syntax';
 
@@ -36,6 +36,7 @@ interface State {
 }
 
 const PRISM_LANGUAGE = 'tempo';
+const durationPlaceholder = 'e.g. 1.2s, 100ms, 500us';
 const plugins = [
   BracesPlugin(),
   SlatePrism({
@@ -134,9 +135,9 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
         {query.queryType === 'search' && (
           <>
             {config.featureToggles.tempoSearch ? (
-              <>
+              <div className={css({ maxWidth: '500px' })}>
                 <InlineFieldRow>
-                  <InlineField label="Query" labelWidth={21} grow>
+                  <InlineField label="Service Name" labelWidth={14} grow>
                     <QueryField
                       additionalPlugins={plugins}
                       query={query.search}
@@ -155,10 +156,89 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
                     />
                   </InlineField>
                 </InlineFieldRow>
-                <div className={css({ width: '50%' })}>
-                  <AdvancedOptions query={query} onChange={onChange} />
-                </div>
-              </>
+                <InlineFieldRow>
+                  <InlineField label="Span Name" labelWidth={14} grow>
+                    <QueryField
+                      additionalPlugins={plugins}
+                      query={query.search}
+                      onTypeahead={this.onTypeahead}
+                      onBlur={this.props.onBlur}
+                      onChange={(value) => {
+                        onChange({
+                          ...query,
+                          search: value,
+                        });
+                      }}
+                      cleanText={this.cleanText}
+                      onRunQuery={this.onRunLinkedQuery}
+                      syntaxLoaded={this.state.hasSyntaxLoaded}
+                      portalOrigin="tempo"
+                    />
+                  </InlineField>
+                </InlineFieldRow>
+                <InlineFieldRow>
+                  <InlineField label="Tags" labelWidth={14} grow tooltip="Values should be in the logfmt format.">
+                    <QueryField
+                      additionalPlugins={plugins}
+                      query={query.search}
+                      onTypeahead={this.onTypeahead}
+                      onBlur={this.props.onBlur}
+                      onChange={(value) => {
+                        onChange({
+                          ...query,
+                          search: value,
+                        });
+                      }}
+                      cleanText={this.cleanText}
+                      onRunQuery={this.onRunLinkedQuery}
+                      syntaxLoaded={this.state.hasSyntaxLoaded}
+                      portalOrigin="tempo"
+                    />
+                  </InlineField>
+                </InlineFieldRow>
+                <InlineFieldRow>
+                  <InlineField label="Min Duration" labelWidth={14} grow>
+                    <Input
+                      value={query.minDuration || ''}
+                      placeholder={durationPlaceholder}
+                      onChange={(v) =>
+                        onChange({
+                          ...query,
+                          minDuration: v.currentTarget.value,
+                        })
+                      }
+                    />
+                  </InlineField>
+                </InlineFieldRow>
+                <InlineFieldRow>
+                  <InlineField label="Max Duration" labelWidth={14} grow>
+                    <Input
+                      value={query.maxDuration || ''}
+                      placeholder={durationPlaceholder}
+                      onChange={(v) =>
+                        onChange({
+                          ...query,
+                          maxDuration: v.currentTarget.value,
+                        })
+                      }
+                    />
+                  </InlineField>
+                </InlineFieldRow>
+                <InlineFieldRow>
+                  <InlineField label="Limit" labelWidth={14} grow tooltip="Maximum numbers of returned results">
+                    <Input
+                      value={query.limit || ''}
+                      type="number"
+                      onChange={(v) =>
+                        onChange({
+                          ...query,
+                          limit: v.currentTarget.value ? parseInt(v.currentTarget.value, 10) : undefined,
+                        })
+                      }
+                    />
+                  </InlineField>
+                </InlineFieldRow>
+              </div>
             ) : (
               <>
                 {!linkedDatasource ? (
