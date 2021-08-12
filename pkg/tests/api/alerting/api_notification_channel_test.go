@@ -39,11 +39,11 @@ func TestTestReceivers(t *testing.T) {
 		store := testinfra.SetUpDatabase(t, dir)
 		store.Bus = bus.GetBus()
 		grafanaListedAddr := testinfra.StartGrafana(t, dir, path, store)
-		require.NoError(t, createUser(t,
-			store,
-			models.ROLE_EDITOR,
-			"grafana",
-			"password"))
+		createUser(t, store, models.CreateUserCommand{
+			DefaultOrgRole: string(models.ROLE_EDITOR),
+			Login:          "grafana",
+			Password:       "password",
+		})
 
 		oldEmailBus := bus.GetHandlerCtx("SendEmailCommandSync")
 		mockEmails := &mockEmailHandler{}
@@ -105,11 +105,11 @@ func TestTestReceivers(t *testing.T) {
 		store := testinfra.SetUpDatabase(t, dir)
 		store.Bus = bus.GetBus()
 		grafanaListedAddr := testinfra.StartGrafana(t, dir, path, store)
-		require.NoError(t, createUser(t,
-			store,
-			models.ROLE_EDITOR,
-			"grafana",
-			"password"))
+		createUser(t, store, models.CreateUserCommand{
+			DefaultOrgRole: string(models.ROLE_EDITOR),
+			Login:          "grafana",
+			Password:       "password",
+		})
 
 		oldEmailBus := bus.GetHandlerCtx("SendEmailCommandSync")
 		mockEmails := &mockEmailHandler{}
@@ -167,11 +167,11 @@ func TestTestReceivers(t *testing.T) {
 		store := testinfra.SetUpDatabase(t, dir)
 		store.Bus = bus.GetBus()
 		grafanaListedAddr := testinfra.StartGrafana(t, dir, path, store)
-		require.NoError(t, createUser(t,
-			store,
-			models.ROLE_EDITOR,
-			"grafana",
-			"password"))
+		createUser(t, store, models.CreateUserCommand{
+			DefaultOrgRole: string(models.ROLE_EDITOR),
+			Login:          "grafana",
+			Password:       "password",
+		})
 
 		oldEmailBus := bus.GetHandlerCtx("SendEmailCommandSync")
 		mockEmails := &mockEmailHandlerWithTimeout{
@@ -238,11 +238,11 @@ func TestTestReceivers(t *testing.T) {
 		store := testinfra.SetUpDatabase(t, dir)
 		store.Bus = bus.GetBus()
 		grafanaListedAddr := testinfra.StartGrafana(t, dir, path, store)
-		require.NoError(t, createUser(t,
-			store,
-			models.ROLE_EDITOR,
-			"grafana",
-			"password"))
+		createUser(t, store, models.CreateUserCommand{
+			DefaultOrgRole: string(models.ROLE_EDITOR),
+			Login:          "grafana",
+			Password:       "password",
+		})
 
 		oldEmailBus := bus.GetHandlerCtx("SendEmailCommandSync")
 		mockEmails := &mockEmailHandlerWithTimeout{
