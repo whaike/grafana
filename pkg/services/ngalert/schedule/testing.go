@@ -237,6 +237,8 @@ func (n *fakeNotifier) PutAlerts(orgID int64, alerts apimodels.PostableAlerts) e
 	return nil
 }
 
+func (n *fakeNotifier) UpdateInstances(orgIDs ...int64) {}
+
 type fakeExternalAlertmanager struct {
 	t      *testing.T
 	mtx    sync.Mutex
