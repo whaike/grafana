@@ -12,6 +12,7 @@ import {
   LegacyForms,
   QueryField,
   RadioButtonGroup,
+  Select,
   SlatePrism,
   Themeable2,
   TypeaheadInput,
@@ -33,6 +34,10 @@ const DEFAULT_QUERY_TYPE: TempoQueryType = 'traceId';
 interface State {
   linkedDatasource?: DataSourceApi;
   hasSyntaxLoaded: boolean;
+  serviceNameOptions: Array<SelectableValue<string>>;
+  spanNameOptions: Array<SelectableValue<string>>;
+  serviceName: SelectableValue<string> | null;
+  spanName: SelectableValue<string> | null;
 }
 
 const PRISM_LANGUAGE = 'tempo';
@@ -51,6 +56,10 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
   state = {
     linkedDatasource: undefined,
     hasSyntaxLoaded: false,
+    serviceNameOptions: [] as Array<SelectableValue<string>>,
+    spanNameOptions: [] as Array<SelectableValue<string>>,
+    serviceName: null,
+    spanName: null,
   };
 
   constructor(props: Props) {
@@ -76,8 +85,11 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
   }
 
   async fetchAutocomplete() {
-    await this.props.datasource.languageProvider.start();
-    this.setState({ hasSyntaxLoaded: true });
+    const lp = this.props.datasource.languageProvider;
+    await lp.start();
+    const serviceNameOptions = await lp.getOptions('service.name');
+    const spanNameOptions = await lp.getOptions('name');
+    this.setState({ hasSyntaxLoaded: true, serviceNameOptions, spanNameOptions });
   }
 
   onChangeLinkedQuery = (value: LokiQuery) => {
@@ -143,41 +155,37 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
           <div className={css({ maxWidth: '500px' })}>
             <InlineFieldRow>
               <InlineField label="Service Name" labelWidth={14} grow>
-                <QueryField
-                  additionalPlugins={plugins}
-                  query={query.search}
-                  onTypeahead={this.onTypeahead}
-                  onBlur={this.props.onBlur}
-                  onChange={(value) => {
+                <Select
+                  menuShouldPortal
+                  options={this.state.serviceNameOptions}
+                  value={this.state.serviceName}
+                  onChange={(v) => {
+                    this.setState({ serviceName: v });
                     onChange({
                       ...query,
-                      search: value,
+                      serviceName: v?.value || undefined,
                     });
                   }}
-                  cleanText={this.cleanText}
-                  onRunQuery={this.onRunLinkedQuery}
-                  syntaxLoaded={this.state.hasSyntaxLoaded}
-                  portalOrigin="tempo"
+                  placeholder="Select a service"
+                  isClearable
                 />
               </InlineField>
             </InlineFieldRow>
             <InlineFieldRow>
               <InlineField label="Span Name" labelWidth={14} grow>
-                <QueryField
-                  additionalPlugins={plugins}
-                  query={query.search}
-                  onTypeahead={this.onTypeahead}
-                  onBlur={this.props.onBlur}
-                  onChange={(value) => {
+                <Select
+                  menuShouldPortal
+                  options={this.state.spanNameOptions}
+                  value={this.state.spanName}
+                  onChange={(v) => {
+                    this.setState({ spanName: v });
                     onChange({
                       ...query,
-                      search: value,
+                      spanName: v?.value || undefined,
                     });
                   }}
-                  cleanText={this.cleanText}
-                  onRunQuery={this.onRunLinkedQuery}
-                  syntaxLoaded={this.state.hasSyntaxLoaded}
-                  portalOrigin="tempo"
+                  placeholder="Select a span"
+                  isClearable
                 />
               </InlineField>
             </InlineFieldRow>

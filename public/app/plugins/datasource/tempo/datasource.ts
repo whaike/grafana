@@ -28,6 +28,8 @@ export type TempoQuery = {
   query: string;
   search: string;
   queryType: TempoQueryType;
+  serviceName?: string;
+  spanName?: string;
   minDuration?: string;
   maxDuration?: string;
   limit?: number;
@@ -99,6 +101,12 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TraceToLo
       let tempoQuery = pick(searchTargets[0], ['minDuration', 'maxDuration', 'limit']);
       // Remove empty properties
       tempoQuery = pickBy(tempoQuery, identity);
+      if (searchTargets[0].serviceName) {
+        tagsQuery.push({ ['service.name']: searchTargets[0].serviceName });
+      }
+      if (searchTargets[0].spanName) {
+        tagsQuery.push({ ['name']: searchTargets[0].spanName });
+      }
       const tagsQueryObject = tagsQuery.reduce((tagQuery, item) => ({ ...tagQuery, ...item }), {});
       subQueries.push(
         this._request('/api/search', { ...tagsQueryObject, ...tempoQuery }).pipe(
