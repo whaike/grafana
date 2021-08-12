@@ -53,7 +53,7 @@ func TestTestReceivers(t *testing.T) {
 		})
 
 		testReceiversURL := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/receivers/test", grafanaListedAddr)
-		// nolint:gosec
+		// nolint
 		resp := postRequest(t, testReceiversURL, `{
 	"receivers": [{
 		"name":"receiver-1",
@@ -119,7 +119,7 @@ func TestTestReceivers(t *testing.T) {
 		})
 
 		testReceiversURL := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/receivers/test", grafanaListedAddr)
-		// nolint:gosec
+		// nolint
 		resp := postRequest(t, testReceiversURL, `{
 	"receivers": [{
 		"name":"receiver-1",
