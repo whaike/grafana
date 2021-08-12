@@ -41,7 +41,7 @@ type InvalidReceiverError struct {
 }
 
 func (e InvalidReceiverError) Error() string {
-	return fmt.Sprintf("the receiver %s is invalid: %s", e.Receiver.Name, e.Err)
+	return fmt.Sprintf("the receiver is invalid: %s", e.Err)
 }
 
 type ReceiverTimeoutError struct {
@@ -68,8 +68,8 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 		UpdatedAt: now,
 	}
 
-	// we must set a group key as this is required by some notification channels (i.e. webhook)
-	ctx = notify.WithGroupKey(ctx, testAlert.Labels.String())
+	// we must set a group key that is unique per test as some receivers use this key to deduplicate alerts
+	ctx = notify.WithGroupKey(ctx, testAlert.Labels.String()+now.String())
 
 	tmpl, err := am.getTemplate()
 	if err != nil {
@@ -83,8 +83,7 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 		Notifier     notify.Notifier
 	}
 
-	// result contains all metadata required to test a receiver
-	// and an error that is non-nil if the test fails
+	// result contains the receiver that was tested and an error that is non-nil if the test failed
 	type result struct {
 		Config       *apimodels.PostableGrafanaReceiver
 		ReceiverName string
@@ -149,7 +148,8 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 	for _, receiver := range c.Receivers {
 		// set up the result for this receiver
 		m[receiver.Name] = TestReceiverResult{
-			Name:    receiver.Name,
+			Name: receiver.Name,
+			// A Grafana receiver can have multiple nested receivers
 			Configs: make([]TestReceiverConfigResult, 0, len(receiver.GrafanaManagedReceivers)),
 		}
 	}

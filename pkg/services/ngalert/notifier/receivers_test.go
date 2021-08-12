@@ -19,7 +19,7 @@ func TestInvalidReceiverError_Error(t *testing.T) {
 		},
 		Err: errors.New("this is an error"),
 	}
-	require.Equal(t, "the receiver test is invalid: this is an error", e.Error())
+	require.Equal(t, "the receiver is invalid: this is an error", e.Error())
 }
 
 func TestReceiverTimeoutError_Error(t *testing.T) {

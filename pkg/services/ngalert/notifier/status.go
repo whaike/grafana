@@ -7,5 +7,10 @@ import (
 func (am *Alertmanager) GetStatus() apimodels.GettableStatus {
 	am.reloadConfigMtx.RLock()
 	defer am.reloadConfigMtx.RUnlock()
-	return *apimodels.NewGettableStatus(&am.config.AlertmanagerConfig)
+
+	config := apimodels.PostableApiAlertingConfig{}
+	if am.ready() {
+		config = am.config.AlertmanagerConfig
+	}
+	return *apimodels.NewGettableStatus(&config)
 }

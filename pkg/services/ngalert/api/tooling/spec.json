@@ -485,6 +485,49 @@
         }
       }
     },
+    "/api/alertmanager/{Recipient}/config/api/v1/receivers/test": {
+      "post": {
+        "tags": [
+          "alertmanager"
+        ],
+        "summary": "Test Grafana managed receivers without saving them.",
+        "operationId": "RoutePostTestReceivers",
+        "parameters": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/PostableApiReceiver"
+            },
+            "x-go-name": "Receivers",
+            "name": "receivers",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ack",
+            "schema": {
+              "$ref": "#/definitions/Ack"
+            }
+          },
+          "207": {
+            "$ref": "#/responses/MultiStatus"
+          },
+          "400": {
+            "description": "ValidationError",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "408": {
+            "description": "Failure",
+            "schema": {
+              "$ref": "#/definitions/Failure"
+            }
+          }
+        }
+      }
+    },
     "/api/prometheus/{Recipient}/api/v1/alerts": {
       "get": {
         "description": "gets the current alerts",
@@ -1019,7 +1062,7 @@
       "$ref": "#/definitions/alertGroup"
     },
     "AlertGroups": {
-      "$ref": "#/definitions/alertGroups"
+      "$ref": "#/definitions/AlertGroups"
     },
     "AlertInstancesResponse": {
       "type": "object",
@@ -1439,7 +1482,7 @@
       "$ref": "#/definitions/ResponseDetails"
     },
     "GettableAlert": {
-      "$ref": "#/definitions/gettableAlert"
+      "$ref": "#/definitions/GettableAlert"
     },
     "GettableAlerts": {
       "$ref": "#/definitions/gettableAlerts"
@@ -1654,6 +1697,7 @@
           "enum": [
             "Alerting"
           ],
+          "x-go-enum-desc": "Alerting AlertingErrState",
           "x-go-name": "ExecErrState"
         },
         "id": {
@@ -1682,6 +1726,7 @@
             "NoData",
             "OK"
           ],
+          "x-go-enum-desc": "Alerting Alerting\nNoData NoData\nOK OK",
           "x-go-name": "NoDataState"
         },
         "orgId": {
@@ -1748,10 +1793,10 @@
       "x-go-package": "github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions"
     },
     "GettableSilence": {
-      "$ref": "#/definitions/GettableSilence"
+      "$ref": "#/definitions/gettableSilence"
     },
     "GettableSilences": {
-      "$ref": "#/definitions/GettableSilences"
+      "$ref": "#/definitions/gettableSilences"
     },
     "GettableStatus": {
       "type": "object",
@@ -2500,6 +2545,7 @@
           "enum": [
             "Alerting"
           ],
+          "x-go-enum-desc": "Alerting AlertingErrState",
           "x-go-name": "ExecErrState"
         },
         "no_data_state": {
@@ -2509,6 +2555,7 @@
             "NoData",
             "OK"
           ],
+          "x-go-enum-desc": "Alerting Alerting\nNoData NoData\nOK OK",
           "x-go-name": "NoDataState"
         },
         "title": {
@@ -2693,7 +2740,7 @@
           "x-go-name": "WechatConfigs"
         }
       },
-      "$ref": "#/definitions/Receiver"
+      "$ref": "#/definitions/receiver"
     },
     "Regexp": {
       "description": "A Regexp is safe for concurrent use by multiple goroutines,\nexcept for configuration methods, such as Longest.",
@@ -3185,6 +3232,76 @@
       },
       "x-go-package": "github.com/prometheus/common/config"
     },
+    "TestReceiverConfigResult": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string",
+          "x-go-name": "Error"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "uid": {
+          "type": "string",
+          "x-go-name": "UID"
+        }
+      },
+      "x-go-package": "github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions"
+    },
+    "TestReceiverResult": {
+      "type": "object",
+      "properties": {
+        "grafana_managed_receiver_configs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TestReceiverConfigResult"
+          },
+          "x-go-name": "Configs"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-package": "github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions"
+    },
+    "TestReceiversConfig": {
+      "type": "object",
+      "properties": {
+        "receivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PostableApiReceiver"
+          },
+          "x-go-name": "Receivers"
+        }
+      },
+      "x-go-package": "github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions"
+    },
+    "TestReceiversResult": {
+      "type": "object",
+      "properties": {
+        "notified_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "NotifedAt"
+        },
+        "receivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TestReceiverResult"
+          },
+          "x-go-name": "Receivers"
+        }
+      },
+      "x-go-package": "github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions"
+    },
     "TestRulePayload": {
       "type": "object",
       "properties": {
@@ -3425,7 +3542,7 @@
           "description": "alerts",
           "type": "array",
           "items": {
-            "$ref": "#/definitions/gettableAlert"
+            "$ref": "#/definitions/GettableAlert"
           },
           "x-go-name": "Alerts"
         },
@@ -3433,7 +3550,7 @@
           "$ref": "#/definitions/labelSet"
         },
         "receiver": {
-          "$ref": "#/definitions/Receiver"
+          "$ref": "#/definitions/receiver"
         }
       },
       "x-go-name": "AlertGroup",
@@ -3606,7 +3723,7 @@
           "description": "receivers",
           "type": "array",
           "items": {
-            "$ref": "#/definitions/Receiver"
+            "$ref": "#/definitions/receiver"
           },
           "x-go-name": "Receivers"
         },
@@ -3633,7 +3750,7 @@
       "description": "GettableAlerts gettable alerts",
       "type": "array",
       "items": {
-        "$ref": "#/definitions/gettableAlert"
+        "$ref": "#/definitions/GettableAlert"
       },
       "x-go-name": "GettableAlerts",
       "x-go-package": "github.com/prometheus/alertmanager/api/v2/models"

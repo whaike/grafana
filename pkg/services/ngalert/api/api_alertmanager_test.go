@@ -74,8 +74,48 @@ func TestContextWithTimeoutFromRequest(t *testing.T) {
 }
 
 func TestStatusForTestReceivers(t *testing.T) {
-	t.Run("assert 400 Bad Request has precedence over 408 Request Timeout", func(t *testing.T) {
+	t.Run("assert HTTP 400 Bad Request when all invalid receivers", func(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, statusForTestReceivers([]notifier.TestReceiverResult{{
+			Name: "test1",
+			Configs: []notifier.TestReceiverConfigResult{{
+				Name:   "test1",
+				UID:    "uid1",
+				Status: "failed",
+				Error:  notifier.InvalidReceiverError{},
+			}},
+		}, {
+			Name: "test2",
+			Configs: []notifier.TestReceiverConfigResult{{
+				Name:   "test2",
+				UID:    "uid2",
+				Status: "failed",
+				Error:  notifier.InvalidReceiverError{},
+			}},
+		}}))
+	})
+
+	t.Run("assert HTTP 408 Request Timeout when all receivers timed out", func(t *testing.T) {
+		require.Equal(t, http.StatusRequestTimeout, statusForTestReceivers([]notifier.TestReceiverResult{{
+			Name: "test1",
+			Configs: []notifier.TestReceiverConfigResult{{
+				Name:   "test1",
+				UID:    "uid1",
+				Status: "failed",
+				Error:  notifier.ReceiverTimeoutError{},
+			}},
+		}, {
+			Name: "test2",
+			Configs: []notifier.TestReceiverConfigResult{{
+				Name:   "test2",
+				UID:    "uid2",
+				Status: "failed",
+				Error:  notifier.ReceiverTimeoutError{},
+			}},
+		}}))
+	})
+
+	t.Run("assert 207 Multi Status for different errors", func(t *testing.T) {
+		require.Equal(t, http.StatusMultiStatus, statusForTestReceivers([]notifier.TestReceiverResult{{
 			Name: "test1",
 			Configs: []notifier.TestReceiverConfigResult{{
 				Name:   "test1",

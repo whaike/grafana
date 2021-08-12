@@ -81,8 +81,9 @@ import (
 //     Responses:
 //
 //       200: Ack
+//       207: MultiStatus
 //       400: ValidationError
-//       408:
+//       408: Failure
 
 // swagger:route GET /api/alertmanager/{Recipient}/api/v2/silences alertmanager RouteGetSilences
 //

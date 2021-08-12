@@ -38,9 +38,9 @@ func (e UnknownReceiverError) Error() string {
 	return fmt.Sprintf("unknown receiver: %s", e.UID)
 }
 
-func (srv AlertmanagerSrv) loadSecureSettings(receivers []*apimodels.PostableApiReceiver) error {
+func (srv AlertmanagerSrv) loadSecureSettings(orgId int64, receivers []*apimodels.PostableApiReceiver) error {
 	// Get the last known working configuration
-	query := ngmodels.GetLatestAlertmanagerConfigurationQuery{}
+	query := ngmodels.GetLatestAlertmanagerConfigurationQuery{OrgID: orgId}
 	if err := srv.store.GetLatestAlertmanagerConfiguration(&query); err != nil {
 		// If we don't have a configuration there's nothing for us to know and we should just continue saving the new one
 		if !errors.Is(err, store.ErrNoAlertmanagerConfiguration) {
@@ -73,7 +73,7 @@ func (srv AlertmanagerSrv) loadSecureSettings(receivers []*apimodels.PostableApi
 			// frontend sends only the secure settings that have to be updated
 			// therefore we have to copy from the last configuration only those secure settings not included in the request
 			for key := range cgmr.SecureSettings {
-				_, ok := receivers[i].PostableGrafanaReceivers.GrafanaManagedReceivers[j].SecureSettings[key]
+				_, ok := gr.SecureSettings[key]
 				if !ok {
 					decryptedValue, err := cgmr.GetDecryptedSecret(key)
 					if err != nil {
@@ -281,7 +281,7 @@ func (srv AlertmanagerSrv) RoutePostAlertingConfig(c *models.ReqContext, body ap
 		}
 	}
 
-	if err := srv.loadSecureSettings(body.AlertmanagerConfig.Receivers); err != nil {
+	if err := srv.loadSecureSettings(c.OrgId, body.AlertmanagerConfig.Receivers); err != nil {
 		var unknownReceiverError UnknownReceiverError
 		if errors.As(err, &unknownReceiverError) {
 			return ErrResp(http.StatusBadRequest, err, "")
@@ -302,16 +302,15 @@ func (srv AlertmanagerSrv) RoutePostAlertingConfig(c *models.ReqContext, body ap
 }
 
 func (srv AlertmanagerSrv) RoutePostAMAlerts(c *models.ReqContext, body apimodels.PostableAlerts) response.Response {
-	// not implemented
 	return NotImplementedResp
 }
 
 func (srv AlertmanagerSrv) RoutePostTestReceivers(c *models.ReqContext, body apimodels.TestReceiversConfigParams) response.Response {
 	if !c.HasUserRole(models.ROLE_EDITOR) {
-		return ErrResp(http.StatusForbidden, errors.New("permission denied"), "")
+		return accessForbiddenResp()
 	}
 
-	if err := srv.loadSecureSettings(body.Receivers); err != nil {
+	if err := srv.loadSecureSettings(c.OrgId, body.Receivers); err != nil {
 		var unknownReceiverError UnknownReceiverError
 		if errors.As(err, &unknownReceiverError) {
 			return ErrResp(http.StatusBadRequest, err, "")
@@ -356,7 +355,7 @@ func contextWithTimeoutFromRequest(ctx context.Context, r *http.Request, default
 		if d := time.Duration(v) * time.Second; d < maxTimeout {
 			timeout = d
 		} else {
-			return nil, nil, errors.New("exceeded maximum timeout")
+			return nil, nil, fmt.Errorf("exceeded maximum timeout of %d seconds", maxTimeout)
 		}
 	}
 	ctx, cancelFunc := context.WithTimeout(ctx, timeout)
@@ -388,33 +387,40 @@ func newTestReceiversResult(r *notifier.TestReceiversResult) apimodels.TestRecei
 // for the results.
 //
 // It returns an HTTP 200 OK status code if notifications were sent to all receivers,
-// an HTTP 400 Bad Request status code if one or more receivers contain invalid
-// configuration and an HTTP 408 Request Timeout error if all receivers contain
-// valid configuration but one or more receivers timed out when sending the test
-// notification.
+// an HTTP 400 Bad Request status code if all receivers contain invalid configuration,
+// an HTTP 408 Request Timeout status code if all receivers timed out when sending
+// a test notification or an HTTP 207 Multi Status.
 func statusForTestReceivers(v []notifier.TestReceiverResult) int {
 	var (
-		isBadRequest bool
-		isTimeout    bool
+		numBadRequests   int
+		numTimeouts      int
+		numUnknownErrors int
 	)
 	for _, receiver := range v {
 		for _, next := range receiver.Configs {
-			var (
-				invalidReceiverErr notifier.InvalidReceiverError
-				receiverTimeoutErr notifier.ReceiverTimeoutError
-			)
-			if errors.As(next.Error, &invalidReceiverErr) {
-				isBadRequest = true
-			} else if errors.As(next.Error, &receiverTimeoutErr) {
-				isTimeout = true
+			if next.Error != nil {
+				var (
+					invalidReceiverErr notifier.InvalidReceiverError
+					receiverTimeoutErr notifier.ReceiverTimeoutError
+				)
+				if errors.As(next.Error, &invalidReceiverErr) {
+					numBadRequests += 1
+				} else if errors.As(next.Error, &receiverTimeoutErr) {
+					numTimeouts += 1
+				} else {
+					numUnknownErrors += 1
+				}
 			}
 		}
 	}
-	if isBadRequest {
+	if numBadRequests == len(v) {
 		return http.StatusBadRequest
-	} else if isTimeout {
-		return http.StatusRequestTimeout
-	} else {
-		return http.StatusOK
 	}
+	if numTimeouts == len(v) {
+		return http.StatusRequestTimeout
+	}
+	if numBadRequests+numTimeouts+numUnknownErrors > 0 {
+		return http.StatusMultiStatus
+	}
+	return http.StatusOK
 }
