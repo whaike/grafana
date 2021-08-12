@@ -110,10 +110,17 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
     const { linkedDatasource } = this.state;
 
     const queryTypeOptions: Array<SelectableValue<TempoQueryType>> = [
-      { value: 'search', label: 'Search' },
       { value: 'traceId', label: 'TraceID' },
       { value: 'upload', label: 'JSON file' },
     ];
+
+    if (config.featureToggles.tempoSearch) {
+      queryTypeOptions.unshift({ value: 'search', label: 'Search' });
+    }
+
+    if (linkedDatasource) {
+      queryTypeOptions.push({ value: 'lokiSearch', label: 'Loki Search' });
+    }
 
     return (
       <>
@@ -133,138 +140,126 @@ class TempoQueryFieldComponent extends React.PureComponent<Props, State> {
           </InlineField>
         </InlineFieldRow>
         {query.queryType === 'search' && (
+          <div className={css({ maxWidth: '500px' })}>
+            <InlineFieldRow>
+              <InlineField label="Service Name" labelWidth={14} grow>
+                <QueryField
+                  additionalPlugins={plugins}
+                  query={query.search}
+                  onTypeahead={this.onTypeahead}
+                  onBlur={this.props.onBlur}
+                  onChange={(value) => {
+                    onChange({
+                      ...query,
+                      search: value,
+                    });
+                  }}
+                  cleanText={this.cleanText}
+                  onRunQuery={this.onRunLinkedQuery}
+                  syntaxLoaded={this.state.hasSyntaxLoaded}
+                  portalOrigin="tempo"
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField label="Span Name" labelWidth={14} grow>
+                <QueryField
+                  additionalPlugins={plugins}
+                  query={query.search}
+                  onTypeahead={this.onTypeahead}
+                  onBlur={this.props.onBlur}
+                  onChange={(value) => {
+                    onChange({
+                      ...query,
+                      search: value,
+                    });
+                  }}
+                  cleanText={this.cleanText}
+                  onRunQuery={this.onRunLinkedQuery}
+                  syntaxLoaded={this.state.hasSyntaxLoaded}
+                  portalOrigin="tempo"
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField label="Tags" labelWidth={14} grow tooltip="Values should be in the logfmt format.">
+                <QueryField
+                  additionalPlugins={plugins}
+                  query={query.search}
+                  onTypeahead={this.onTypeahead}
+                  onBlur={this.props.onBlur}
+                  onChange={(value) => {
+                    onChange({
+                      ...query,
+                      search: value,
+                    });
+                  }}
+                  cleanText={this.cleanText}
+                  onRunQuery={this.onRunLinkedQuery}
+                  syntaxLoaded={this.state.hasSyntaxLoaded}
+                  portalOrigin="tempo"
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField label="Min Duration" labelWidth={14} grow>
+                <Input
+                  value={query.minDuration || ''}
+                  placeholder={durationPlaceholder}
+                  onChange={(v) =>
+                    onChange({
+                      ...query,
+                      minDuration: v.currentTarget.value,
+                    })
+                  }
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField label="Max Duration" labelWidth={14} grow>
+                <Input
+                  value={query.maxDuration || ''}
+                  placeholder={durationPlaceholder}
+                  onChange={(v) =>
+                    onChange({
+                      ...query,
+                      maxDuration: v.currentTarget.value,
+                    })
+                  }
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField label="Limit" labelWidth={14} grow tooltip="Maximum numbers of returned results">
+                <Input
+                  value={query.limit || ''}
+                  type="number"
+                  onChange={(v) =>
+                    onChange({
+                      ...query,
+                      limit: v.currentTarget.value ? parseInt(v.currentTarget.value, 10) : undefined,
+                    })
+                  }
+                />
+              </InlineField>
+            </InlineFieldRow>
+          </div>
+        )}
+        {query.queryType === 'lokiSearch' && (
           <>
-            {config.featureToggles.tempoSearch ? (
-              <div className={css({ maxWidth: '500px' })}>
-                <InlineFieldRow>
-                  <InlineField label="Service Name" labelWidth={14} grow>
-                    <QueryField
-                      additionalPlugins={plugins}
-                      query={query.search}
-                      onTypeahead={this.onTypeahead}
-                      onBlur={this.props.onBlur}
-                      onChange={(value) => {
-                        onChange({
-                          ...query,
-                          search: value,
-                        });
-                      }}
-                      cleanText={this.cleanText}
-                      onRunQuery={this.onRunLinkedQuery}
-                      syntaxLoaded={this.state.hasSyntaxLoaded}
-                      portalOrigin="tempo"
-                    />
-                  </InlineField>
-                </InlineFieldRow>
-                <InlineFieldRow>
-                  <InlineField label="Span Name" labelWidth={14} grow>
-                    <QueryField
-                      additionalPlugins={plugins}
-                      query={query.search}
-                      onTypeahead={this.onTypeahead}
-                      onBlur={this.props.onBlur}
-                      onChange={(value) => {
-                        onChange({
-                          ...query,
-                          search: value,
-                        });
-                      }}
-                      cleanText={this.cleanText}
-                      onRunQuery={this.onRunLinkedQuery}
-                      syntaxLoaded={this.state.hasSyntaxLoaded}
-                      portalOrigin="tempo"
-                    />
-                  </InlineField>
-                </InlineFieldRow>
-                <InlineFieldRow>
-                  <InlineField label="Tags" labelWidth={14} grow tooltip="Values should be in the logfmt format.">
-                    <QueryField
-                      additionalPlugins={plugins}
-                      query={query.search}
-                      onTypeahead={this.onTypeahead}
-                      onBlur={this.props.onBlur}
-                      onChange={(value) => {
-                        onChange({
-                          ...query,
-                          search: value,
-                        });
-                      }}
-                      cleanText={this.cleanText}
-                      onRunQuery={this.onRunLinkedQuery}
-                      syntaxLoaded={this.state.hasSyntaxLoaded}
-                      portalOrigin="tempo"
-                    />
-                  </InlineField>
-                </InlineFieldRow>
-                <InlineFieldRow>
-                  <InlineField label="Min Duration" labelWidth={14} grow>
-                    <Input
-                      value={query.minDuration || ''}
-                      placeholder={durationPlaceholder}
-                      onChange={(v) =>
-                        onChange({
-                          ...query,
-                          minDuration: v.currentTarget.value,
-                        })
-                      }
-                    />
-                  </InlineField>
-                </InlineFieldRow>
-                <InlineFieldRow>
-                  <InlineField label="Max Duration" labelWidth={14} grow>
-                    <Input
-                      value={query.maxDuration || ''}
-                      placeholder={durationPlaceholder}
-                      onChange={(v) =>
-                        onChange({
-                          ...query,
-                          maxDuration: v.currentTarget.value,
-                        })
-                      }
-                    />
-                  </InlineField>
-                </InlineFieldRow>
-                <InlineFieldRow>
-                  <InlineField label="Limit" labelWidth={14} grow tooltip="Maximum numbers of returned results">
-                    <Input
-                      value={query.limit || ''}
-                      type="number"
-                      onChange={(v) =>
-                        onChange({
-                          ...query,
-                          limit: v.currentTarget.value ? parseInt(v.currentTarget.value, 10) : undefined,
-                        })
-                      }
-                    />
-                  </InlineField>
-                </InlineFieldRow>
-              </div>
-            ) : (
-              <>
-                {!linkedDatasource ? (
-                  <div className="text-warning">
-                    Please set up a Traces-to-logs datasource in the datasource settings.
-                  </div>
-                ) : (
-                  <>
-                    <InlineLabel>
-                      Tempo uses {((linkedDatasource as unknown) as DataSourceApi).name} to find traces.
-                    </InlineLabel>
+            <InlineLabel>
+              Tempo uses {((linkedDatasource as unknown) as DataSourceApi).name} to find traces.
+            </InlineLabel>
 
-                    <LokiQueryField
-                      datasource={linkedDatasource!}
-                      onChange={this.onChangeLinkedQuery}
-                      onRunQuery={this.onRunLinkedQuery}
-                      query={this.props.query.linkedQuery ?? ({ refId: 'linked' } as any)}
-                      history={[]}
-                    />
-                  </>
-                )}
-              </>
-            )}
+            <LokiQueryField
+              datasource={linkedDatasource!}
+              onChange={this.onChangeLinkedQuery}
+              onRunQuery={this.onRunLinkedQuery}
+              query={this.props.query.linkedQuery ?? ({ refId: 'linked' } as any)}
+              history={[]}
+            />
           </>
         )}
-
         {query.queryType === 'upload' && (
           <div className={css({ padding: this.props.theme.spacing(2) })}>
             <FileDropzone
