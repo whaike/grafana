@@ -62,8 +62,11 @@ func (am *Alertmanager) TestReceivers(ctx context.Context, c apimodels.TestRecei
 				model.LabelName("alertname"): "TestAlertAlwaysFiring",
 				model.LabelName("instance"):  "Grafana",
 			},
-			Annotations: model.LabelSet{},
-			StartsAt:    now,
+			Annotations: model.LabelSet{
+				model.LabelName("summary"):     "TestAlertAlwaysFiring",
+				model.LabelName("description"): "This is a test alert from Grafana",
+			},
+			StartsAt: now,
 		},
 		UpdatedAt: now,
 	}
