@@ -91,13 +91,19 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TraceToLo
     }
 
     if (searchTargets.length) {
-      const tags = searchTargets[0].search.split(/\s+(?=([^"]*"[^"]*")*[^"]*$)/g);
+      const tags = searchTargets[0].search ? searchTargets[0].search.split(/\s+(?=([^"]*"[^"]*")*[^"]*$)/g) : [];
       // Compact to remove empty values from array
-      const tagsQuery = compact(tags).map((tag) => {
-        const parts = tag.split('=');
-        const extractedString = parts[1].replace(/^"(.*)"$/, '$1');
-        return { [parts[0]]: extractedString };
-      });
+      const tagsQuery = compact(tags)
+        .map((tag) => {
+          const parts = tag.split('=');
+          if (parts.length === 2) {
+            const extractedString = parts[1].replace(/^"(.*)"$/, '$1');
+            return { [parts[0]]: extractedString };
+          } else {
+            return null; // To filter out incomplete tag queries
+          }
+        })
+        .filter((v) => !!v);
       let tempoQuery = pick(searchTargets[0], ['minDuration', 'maxDuration', 'limit']);
       // Remove empty properties
       tempoQuery = pickBy(tempoQuery, identity);
