@@ -77,18 +77,20 @@ func (ng *AlertNG) Init() error {
 	ng.Alertmanager = notifier.New(ng.Cfg, store, ng.Metrics)
 
 	schedCfg := schedule.SchedulerCfg{
-		C:                clock.New(),
-		BaseInterval:     baseInterval,
-		Logger:           log.New("ngalert.scheduler"),
-		MaxAttempts:      maxAttempts,
-		Evaluator:        eval.Evaluator{Cfg: ng.Cfg, Log: ng.Log},
-		InstanceStore:    store,
-		RuleStore:        store,
-		AdminConfigStore: store,
-		OrgStore:         store,
-		Notifier:         ng.Alertmanager,
-		Metrics:          ng.Metrics,
+		C:                       clock.New(),
+		BaseInterval:            baseInterval,
+		Logger:                  log.New("ngalert.scheduler"),
+		MaxAttempts:             maxAttempts,
+		Evaluator:               eval.Evaluator{Cfg: ng.Cfg, Log: ng.Log},
+		InstanceStore:           store,
+		RuleStore:               store,
+		AdminConfigStore:        store,
+		OrgStore:                store,
+		Notifier:                ng.Alertmanager,
+		Metrics:                 ng.Metrics,
+		AdminConfigPollInterval: ng.Cfg.AdminConfigPollInterval,
 	}
+
 	ng.stateManager = state.NewManager(ng.Log, ng.Metrics, store, store)
 	ng.schedule = schedule.NewScheduler(schedCfg, ng.DataService, ng.Cfg.AppURL, ng.stateManager)
 
