@@ -326,22 +326,7 @@ func (this *WeChatNotifier) Notify(evalContext *alerting.EvalContext) error {
 	if evalContext.ImageOnDiskPath == "" && evalContext.ImagePublicURL != "" {
 		msg.ImageUrl = evalContext.ImagePublicURL
 	}
-	//this.log.Error("print msg", msg)
-	//bodyJSON, err := simplejson.NewJson([]byte(`{
-	//	"touser": "` + this.ToUser + `",
-	//	"msgtype" : "text",
-	//	"agentid": "` + this.AgentId + `",
-	//	"text" : {
-	//			"content": "` + strings.ReplaceAll(content, `"`, `'`) + `"
-	//	}
-	//}`))
 
-	//if err != nil {
-	//	this.log.Error("Failed to create Json data", "error", err, "wechat", this.Name)
-	//	return err
-	//}
-	//
-	//body, _ := bodyJSON.MarshalJSON()
 	msgM, _ := json.Marshal(msg)
 	var out bytes.Buffer
 	json.Indent(&out, msgM, "", "    ")

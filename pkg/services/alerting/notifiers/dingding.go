@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/infra/log"
@@ -36,12 +37,25 @@ func init() {
 				SelectOptions: []alerting.SelectOption{
 					{
 						Value: "link",
-						Label: "Link"},
+						Label: "Link",
+					},
 					{
 						Value: "actionCard",
 						Label: "ActionCard",
 					},
+					{
+						Value: "text",
+						Label: "Text",
+					},
 				},
+			},
+			{
+				Label:        "At",
+				Element:      alerting.ElementTypeInput,
+				InputType:    alerting.InputTypeText,
+				Placeholder:  "18989898889,多个号码用逗号隔开,@所有人用 @all ,仅支持 Text 消息类型",
+				PropertyName: "msgAt",
+				Required:     true,
 			},
 		},
 	})
@@ -55,10 +69,13 @@ func newDingDingNotifier(model *models.AlertNotification) (alerting.Notifier, er
 
 	msgType := model.Settings.Get("msgType").MustString(defaultDingdingMsgType)
 
+	msgAt := model.Settings.Get("msgAt").MustString()
+
 	return &DingDingNotifier{
 		NotifierBase: NewNotifierBase(model),
 		MsgType:      msgType,
 		URL:          url,
+		MsgAt:        msgAt,
 		log:          log.New("alerting.notifier.dingding"),
 	}, nil
 }
@@ -68,13 +85,15 @@ type DingDingNotifier struct {
 	NotifierBase
 	MsgType string
 	URL     string
+	MsgAt   string
 	log     log.Logger
 }
 
 // Notify sends the alert notification to dingding.
 func (dd *DingDingNotifier) Notify(evalContext *alerting.EvalContext) error {
 	dd.log.Info("Sending dingding")
-
+	dd.log.Info(dd.MsgType)
+	dd.log.Info(dd.MsgAt)
 	messageURL, err := evalContext.GetRuleURL()
 	if err != nil {
 		dd.log.Error("Failed to get messageUrl", "error", err, "dingding", dd.Name)
@@ -85,6 +104,8 @@ func (dd *DingDingNotifier) Notify(evalContext *alerting.EvalContext) error {
 	if err != nil {
 		return err
 	}
+
+	dd.log.Info(string(body))
 
 	cmd := &models.SendWebhookSync{
 		Url:  dd.URL,
@@ -121,6 +142,7 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 	for i, match := range evalContext.EvalMatches {
 		message += fmt.Sprintf("\n%2d. %s: %s", i+1, match.Metric, match.Value)
 	}
+	dd.log.Info(dd.MsgType)
 
 	var bodyMsg map[string]interface{}
 	if dd.MsgType == "actionCard" {
@@ -131,15 +153,50 @@ func (dd *DingDingNotifier) genBody(evalContext *alerting.EvalContext, messageUR
 
 		bodyMsg = map[string]interface{}{
 			"msgtype": "actionCard",
-			"actionCard": map[string]string{
+			"actionCard": map[string]interface{}{
 				"text":        message,
 				"title":       title,
 				"singleTitle": "More",
 				"singleURL":   messageURL,
 			},
 		}
+	} else if dd.MsgType == "text" {
+		at := map[string]interface{}{}
+		msgAt := dd.MsgAt
+		if strings.HasPrefix(msgAt, "@") && msgAt == "@all" {
+			at = map[string]interface{}{
+				"isAtAll": true,
+			}
+		} else if strings.Contains(msgAt, ",") {
+			tmps := strings.Split(msgAt, ",")
+			tmp := make([]string, 0)
+			for _, t := range tmps {
+				tmp = append(tmp, t)
+			}
+			at = map[string]interface{}{
+				"atMobiles": tmp,
+			}
+		} else if len(msgAt) == 11 {
+			tmp := make([]string, 0)
+			tmp = append(tmp, msgAt)
+			at = map[string]interface{}{
+				"atMobiles": tmp,
+			}
+		} else {
+			at = map[string]interface{}{
+				"isAtAll": false,
+			}
+		}
+
+		bodyMsg = map[string]interface{}{
+			"at": at,
+			"text": map[string]string{
+				"content": "alert:" + message},
+			"msgtype": "text",
+		}
+
 	} else {
-		link := map[string]string{
+		link := map[string]interface{}{
 			"text":       message,
 			"title":      title,
 			"messageUrl": messageURL,
