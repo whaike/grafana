@@ -18,6 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grafana/grafana/pkg/services/ngalert/schedule"
+
+	"github.com/grafana/grafana/pkg/services/ngalert/notifier"
+
 	"github.com/gobwas/glob"
 
 	"github.com/prometheus/common/model"
@@ -408,6 +412,12 @@ type Cfg struct {
 
 	// Unified Alerting
 	AdminConfigPollInterval time.Duration
+	HAListenAddr            string
+	HAAdvertiseAddr         string
+	HAPeers                 []string
+	HAPeerTimeout           time.Duration
+	HAGossipInterval        time.Duration
+	HAPushPullInterval      time.Duration
 }
 
 // IsLiveConfigEnabled returns true if live should be able to save configs to SQL tables
@@ -900,7 +910,6 @@ func (cfg *Cfg) Load(args *CommandLineArgs) error {
 	if err := readAlertingSettings(iniFile); err != nil {
 		return err
 	}
-
 	if err := cfg.readUnifiedAlertingSettings(iniFile); err != nil {
 		return err
 	}
@@ -1358,8 +1367,30 @@ func readRenderingSettings(iniFile *ini.File, cfg *Cfg) error {
 
 func (cfg *Cfg) readUnifiedAlertingSettings(iniFile *ini.File) error {
 	ua := iniFile.Section("unified_alerting")
-	s := ua.Key("admin_config_poll_interval_seconds").MustInt(60)
-	cfg.AdminConfigPollInterval = time.Second * time.Duration(s)
+	var err error
+	cfg.AdminConfigPollInterval, err = gtime.ParseDuration(valueAsString(ua, "admin_config_poll_interval", schedule.DefaultAdminConfigPollInterval.String()))
+	if err != nil {
+		return err
+	}
+	cfg.HAPeerTimeout, err = gtime.ParseDuration(valueAsString(ua, "ha_peer_timeout", notifier.DefaultPeerTimeout.String()))
+	if err != nil {
+		return err
+	}
+	cfg.HAGossipInterval, err = gtime.ParseDuration(valueAsString(ua, "ha_gossip_interval", notifier.DefaultGossipInterval.String()))
+	if err != nil {
+		return err
+	}
+	cfg.HAPushPullInterval, err = gtime.ParseDuration(valueAsString(ua, "ha_push_pull_interval", notifier.DefaultPushPullInterval.String()))
+	if err != nil {
+		return err
+	}
+	cfg.HAListenAddr = ua.Key("ha_listen_address").MustString("")
+	cfg.HAAdvertiseAddr = ua.Key("ha_advertise_address").MustString("")
+	peers := ua.Key("ha_peers").MustString("")
+	for _, peer := range strings.Split(peers, ",") {
+		peer = strings.TrimSpace(peer)
+		cfg.HAPeers = append(cfg.HAPeers, peer)
+	}
 	return nil
 }
 
