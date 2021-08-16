@@ -68,7 +68,11 @@ func TestNotificationChannels(t *testing.T) {
 	bus.AddHandlerCtx("", mockEmail.sendEmailCommandHandlerSync)
 
 	// Create a user to make authenticated requests
-	require.NoError(t, createUser(t, s, models.ROLE_EDITOR, "grafana", "password"))
+	createUser(t, s, models.CreateUserCommand{
+		DefaultOrgRole: string(models.ROLE_EDITOR),
+		Password:       "password",
+		Login:          "grafana",
+	})
 
 	{
 		// There are no notification channel config initially - so it returns the default configuration.
@@ -122,6 +126,30 @@ func TestNotificationChannels(t *testing.T) {
 	mockChannel.matchesExpNotifications(t, expNonEmailNotifications)
 	require.Equal(t, expEmailNotifications, mockEmail.emails)
 	require.NoError(t, mockChannel.Close())
+
+	{
+		// Delete the configuration; so it returns the default configuration.
+		u := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/alerts", grafanaListedAddr)
+		req, err := http.NewRequest(http.MethodDelete, u, nil)
+		require.NoError(t, err)
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			err := resp.Body.Close()
+			require.NoError(t, err)
+		})
+		b, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, 202, resp.StatusCode)
+		require.JSONEq(t, `{"message":"configuration deleted; the default is applied"}`, string(b))
+
+		alertsURL := fmt.Sprintf("http://grafana:password@%s/api/alertmanager/grafana/config/api/v1/alerts", grafanaListedAddr)
+		resp = getRequest(t, alertsURL, http.StatusOK) // nolint
+		b, err = ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.JSONEq(t, defaultAlertmanagerConfigJSON, string(b))
+	}
 }
 
 func getAlertmanagerConfig(channelAddr string) string {
@@ -699,7 +727,7 @@ const alertmanagerConfig = `
         "grafana_managed_receiver_configs": [
           {
             "name": "line_test",
-            "type": "line",
+            "type": "LINE",
             "settings": {},
             "secureSettings": {
               "token": "mysecrettoken"
@@ -1193,7 +1221,7 @@ var expAlertmanagerConfigFromAPI = `
           {
             "uid": "",
             "name": "line_test",
-            "type": "line",
+            "type": "LINE",
             "disableResolveMessage": false,
             "settings": {},
             "secureFields": {
@@ -1345,7 +1373,7 @@ var expEmailNotifications = []*models.SendEmailCommandSync{
 		SendEmailCommand: models.SendEmailCommand{
 			To:          []string{"test@email.com"},
 			SingleEmail: true,
-			Template:    "ng_alert_notification.html",
+			Template:    "ng_alert_notification",
 			Subject:     "[FIRING:1] EmailAlert ",
 			Data: map[string]interface{}{
 				"Title":   "[FIRING:1] EmailAlert ",
